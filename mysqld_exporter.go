@@ -515,7 +515,10 @@ func newDB(dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.Exec("set session information_schema_stats_expiry=0")
+	_, err = db.Exec("set session information_schema_stats_expiry=0")
+	if err != nil {
+		return nil, err
+	}
 	db.SetMaxOpenConns(*exporterMaxOpenConns)
 	db.SetMaxIdleConns(*exporterMaxIdleConns)
 	db.SetConnMaxLifetime(*exporterConnMaxLifetime)
