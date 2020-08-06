@@ -69,11 +69,6 @@ func (ScrapeInnodbMetrics) Version() float64 {
 
 // Scrape collects data.
 func (ScrapeInnodbMetrics) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
-	_, err := db.Exec("set session information_schema_stats_expiry=0")
-	if err != nil {
-		return err
-	}
-
 	innodbMetricsRows, err := db.QueryContext(ctx, infoSchemaInnodbMetricsQuery)
 	if err != nil {
 		return err
