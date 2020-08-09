@@ -356,7 +356,7 @@ func main() {
 	}
 
 	// Disable cache for MySQL 8.0 and higher. Lower versions has disabled cache as default.
-	// Behvaior for all verisions will be same.
+	// Behvaior for all versions will be same.
 	dsnParams = append(dsnParams, disableInformationSchemaCache)
 
 	if strings.Contains(dsn, "?") {
