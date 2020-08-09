@@ -29,8 +29,9 @@ import (
 // System variable params formatting.
 // See: https://github.com/go-sql-driver/mysql#system-variables
 const (
-	sessionSettingsParam = `log_slow_filter=%27tmp_table_on_disk,filesort_on_disk%27`
-	timeoutParam         = `lock_wait_timeout=%d`
+	sessionSettingsParam          = `log_slow_filter=%27tmp_table_on_disk,filesort_on_disk%27`
+	timeoutParam                  = `lock_wait_timeout=%d`
+	disableInformationSchemaCache = `information_schema_stats_expiry=0`
 )
 
 var (
@@ -354,6 +355,10 @@ func main() {
 		dsnParams = append(dsnParams, sessionSettingsParam)
 	}
 
+	// Disable cache for MySQL 8.0 and higher. Lower versions has disabled cache as default.
+	// Behvaior for all verisions will be same.
+	dsnParams = append(dsnParams, disableInformationSchemaCache)
+
 	if strings.Contains(dsn, "?") {
 		dsn = dsn + "&"
 	} else {
@@ -519,11 +524,6 @@ func newDB(dsn string) (*sql.DB, error) {
 	db.SetMaxOpenConns(*exporterMaxOpenConns)
 	db.SetMaxIdleConns(*exporterMaxIdleConns)
 	db.SetConnMaxLifetime(*exporterConnMaxLifetime)
-
-	_, err = db.Exec("set session information_schema_stats_expiry=0")
-	if err != nil {
-		return nil, err
-	}
 
 	return db, nil
 }
