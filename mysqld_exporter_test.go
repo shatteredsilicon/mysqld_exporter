@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -19,6 +20,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/smartystreets/goconvey/convey"
 )
@@ -244,6 +247,56 @@ func testVersion(t *testing.T, data bin) {
 	if expectedScanner.Scan() {
 		t.Errorf("expected '%s' but didn't got more data", expectedScanner.Text())
 	}
+}
+
+func TestInformationSchemaCache(t *testing.T) {
+	name := "test_cache"
+	dsn := "root@tcp(127.0.0.1:3306)/?information_schema_stats_expiry=0"
+	db, err := sql.Open("mysql", dsn)
+	assert.NoError(t, err)
+
+	var dbExist int
+	err = db.QueryRow("SELECT COUNT(SCHEMA_NAME) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '" + name + "'").Scan(&dbExist)
+	assert.NoError(t, err)
+	if dbExist == 0 {
+		defer func() {
+			_, err = db.Exec("DROP TABLE " + name)
+			assert.NoError(t, err)
+		}()
+	}
+
+	var tableExist int
+	err = db.QueryRow("SELECT COUNT(TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '" + name + "'").Scan(&tableExist)
+	assert.NoError(t, err)
+	if tableExist == 0 {
+		defer func() {
+			_, err = db.Exec("DROP DATABASE " + name)
+			assert.NoError(t, err)
+		}()
+	}
+
+	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS " + name)
+	assert.NoError(t, err)
+	_, err = db.Exec("USE " + name)
+	assert.NoError(t, err)
+
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS " + name + " (id int(64))")
+	assert.NoError(t, err)
+	_, err = db.Exec("TRUNCATE " + name)
+	assert.NoError(t, err)
+	_, err = db.Exec("INSERT INTO " + name + " VALUES(1)")
+	assert.NoError(t, err)
+
+	var count int
+	err = db.QueryRow("SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '" + name + "' AND TABLE_NAME = '" + name + "'").Scan(&count)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	_, err = db.Exec("INSERT INTO " + name + " VALUES(2)")
+	assert.NoError(t, err)
+	err = db.QueryRow("SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '" + name + "' AND TABLE_NAME = '" + name + "'").Scan(&count)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, count)
 }
 
 func testLandingPage(t *testing.T, data bin) {
