@@ -101,6 +101,10 @@ func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 		dbList = strings.Split(*tableSchemaDatabases, ",")
 	}
 
+	trx, _ := db.Begin()
+	defer trx.Commit()
+	db.Exec("set session information_schema_stats_expiry=0")
+
 	for _, database := range dbList {
 		tableSchemaRows, err := db.QueryContext(ctx, fmt.Sprintf(tableSchemaQuery, database))
 		if err != nil {

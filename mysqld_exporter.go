@@ -29,9 +29,8 @@ import (
 // System variable params formatting.
 // See: https://github.com/go-sql-driver/mysql#system-variables
 const (
-	sessionSettingsParam          = `log_slow_filter=%27tmp_table_on_disk,filesort_on_disk%27`
-	timeoutParam                  = `lock_wait_timeout=%d`
-	disableInformationSchemaCache = `information_schema_stats_expiry=0`
+	sessionSettingsParam = `log_slow_filter=%27tmp_table_on_disk,filesort_on_disk%27`
+	timeoutParam         = `lock_wait_timeout=%d`
 )
 
 var (
@@ -354,10 +353,6 @@ func main() {
 	if *exporterLogSlowFilter {
 		dsnParams = append(dsnParams, sessionSettingsParam)
 	}
-
-	// Disable cache for MySQL 8.0 and higher. Lower versions has disabled cache as default.
-	// Behavior for all versions will be same.
-	dsnParams = append(dsnParams, disableInformationSchemaCache)
 
 	if strings.Contains(dsn, "?") {
 		dsn = dsn + "&"
