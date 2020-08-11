@@ -263,7 +263,6 @@ func TestInformationSchemaCache(t *testing.T) {
 		defer func() {
 			_, err = db.Exec("DROP TABLE " + name)
 			assert.NoError(t, err)
-
 		}()
 	}
 	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS " + name)
