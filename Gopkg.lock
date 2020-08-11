@@ -29,14 +29,6 @@
   version = "v1.0.1"
 
 [[projects]]
-  digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
-  name = "github.com/davecgh/go-spew"
-  packages = ["spew"]
-  pruneopts = "NUT"
-  revision = "8991bc29aa16c548c550c7ff78260e27b9ab7c73"
-  version = "v1.1.1"
-
-[[projects]]
   digest = "1:13e9a236e56e18fecb73f5b2f2eb7f60060a1a9bc27e5a7328ab22e275ecb63e"
   name = "github.com/go-sql-driver/mysql"
   packages = ["."]
@@ -91,14 +83,6 @@
   pruneopts = "NUT"
   revision = "f41f4d077d01885b45c4baa984b834e450725707"
   version = "v0.5.0"
-
-[[projects]]
-  digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
-  name = "github.com/pmezard/go-difflib"
-  packages = ["difflib"]
-  pruneopts = "NUT"
-  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
-  version = "v1.0.0"
 
 [[projects]]
   digest = "1:097cc61836050f45cbb712ae3bb45d66fba464c16b8fac09907fa3c1f753eff6"
@@ -179,14 +163,6 @@
   version = "1.6.3"
 
 [[projects]]
-  digest = "1:c59bbf7751c26b0fd98789cc8a8bdedc8377a61506537f62874902e597b20fa3"
-  name = "github.com/stretchr/testify"
-  packages = ["assert"]
-  pruneopts = "NUT"
-  revision = "f654a9112bbeac49ca2cd45bfbe11533c4666cf8"
-  version = "v1.6.1"
-
-[[projects]]
   branch = "master"
   digest = "1:180fc82c4b5ed9fda777d606ca3fa10dc422eef8d54d9995c5b27614a9fe74b3"
   name = "golang.org/x/sys"
@@ -239,14 +215,6 @@
   revision = "51d6538a90f86fe93ac480b35f37b2be17fef232"
   version = "v2.2.2"
 
-[[projects]]
-  branch = "v3"
-  digest = "1:c9a53b5be2654e3d1d466419bb389371ff3755220ec3cafd43dd8742fb7aebdd"
-  name = "gopkg.in/yaml.v3"
-  packages = ["."]
-  pruneopts = "NUT"
-  revision = "eeeca48fe7764f320e4870d231902bf9c1be2c08"
-
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
@@ -260,7 +228,6 @@
     "github.com/prometheus/common/model",
     "github.com/prometheus/common/version",
     "github.com/smartystreets/goconvey/convey",
-    "github.com/stretchr/testify/assert",
     "gopkg.in/DATA-DOG/go-sqlmock.v1",
     "gopkg.in/alecthomas/kingpin.v2",
     "gopkg.in/ini.v1",

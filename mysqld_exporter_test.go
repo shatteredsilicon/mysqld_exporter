@@ -16,7 +16,6 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -263,16 +262,11 @@ func TestInformationSchemaCache(t *testing.T) {
 		defer func() {
 			_, err = db.Exec("DROP TABLE " + name)
 			assert.NoError(t, err)
-
 		}()
 	}
-	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS " + name)
-	assert.NoError(t, err)
-	_, err = db.Exec("USE " + name)
-	assert.NoError(t, err)
 
 	var tableExist int
-	err = db.QueryRow("SELECT COUNT(TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '" + name + "' AND TABLE_NAME = '" + name + "'").Scan(&tableExist)
+	err = db.QueryRow("SELECT COUNT(TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '" + name + "'").Scan(&tableExist)
 	assert.NoError(t, err)
 	if tableExist == 0 {
 		defer func() {
@@ -280,19 +274,29 @@ func TestInformationSchemaCache(t *testing.T) {
 			assert.NoError(t, err)
 		}()
 	}
+
+	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS " + name)
+	assert.NoError(t, err)
+	_, err = db.Exec("USE " + name)
+	assert.NoError(t, err)
+
 	_, err = db.Exec("CREATE TABLE IF NOT EXISTS " + name + " (id int(64))")
 	assert.NoError(t, err)
 	_, err = db.Exec("TRUNCATE " + name)
 	assert.NoError(t, err)
+	_, err = db.Exec("INSERT INTO " + name + " VALUES(1)")
+	assert.NoError(t, err)
 
 	var count int
-	for i := 1; i < 3; i++ {
-		_, err = db.Exec("INSERT INTO " + name + " VALUES(" + strconv.Itoa(i) + ")")
-		assert.NoError(t, err)
-		err = db.QueryRow("SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '" + name + "' AND TABLE_NAME = '" + name + "'").Scan(&count)
-		assert.NoError(t, err)
-		assert.Equal(t, i, count)
-	}
+	err = db.QueryRow("SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '" + name + "' AND TABLE_NAME = '" + name + "'").Scan(&count)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	_, err = db.Exec("INSERT INTO " + name + " VALUES(2)")
+	assert.NoError(t, err)
+	err = db.QueryRow("SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '" + name + "' AND TABLE_NAME = '" + name + "'").Scan(&count)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, count)
 }
 
 func testLandingPage(t *testing.T, data bin) {
