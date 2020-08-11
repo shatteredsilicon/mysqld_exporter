@@ -285,12 +285,13 @@ func TestInformationSchemaCache(t *testing.T) {
 	assert.NoError(t, err)
 
 	var count int
-	for i := 1; i < 3; i++ {
-		_, err = db.Exec("INSERT INTO " + name + " VALUES(" + strconv.Itoa(i) + ")")
+	rows := []int{1, 2}
+	for _, row := range rows {
+		_, err = db.Exec("INSERT INTO " + name + " VALUES(" + strconv.Itoa(row) + ")")
 		assert.NoError(t, err)
 		err = db.QueryRow("SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '" + name + "' AND TABLE_NAME = '" + name + "'").Scan(&count)
 		assert.NoError(t, err)
-		assert.Equal(t, i, count)
+		assert.Equal(t, row, count)
 	}
 }
 
