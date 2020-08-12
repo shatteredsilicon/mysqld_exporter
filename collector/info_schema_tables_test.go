@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestScrapeTableSchema(t *testing.T) { //nolint
+func TestScrapeTableSchema(t *testing.T) { //nolint:unused
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:3306)/")
 	assert.NoError(t, err)
 	defer db.Close()

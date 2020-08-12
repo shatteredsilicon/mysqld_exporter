@@ -104,7 +104,7 @@ func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 	tx, _ := db.Begin()
 	// We dont care about error, because it return error for every MySQL lower then 8.0
 	db.Exec("set session information_schema_stats_expiry=0") //nolint:errcheck
-	defer tx.Rollback()                                      //nolint:errcheck
+	defer tx.Rollback()                                      //nolint:errcheck,wsl
 
 	for _, database := range dbList {
 		tableSchemaRows, err := db.QueryContext(ctx, fmt.Sprintf(tableSchemaQuery, database))
