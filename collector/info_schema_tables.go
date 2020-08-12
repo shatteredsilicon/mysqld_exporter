@@ -102,7 +102,9 @@ func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 	}
 
 	tx, _ := db.Begin()
+	//nolint:errcheck
 	db.Exec("set session information_schema_stats_expiry=0")
+	//nolint:errcheck
 	defer tx.Rollback()
 
 	for _, database := range dbList {

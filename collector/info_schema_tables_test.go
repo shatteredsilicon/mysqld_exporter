@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestScrapeTableSchema_Scrape(t *testing.T) {
+//nolint
+func TestScrapeTableSchema(t *testing.T) {
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:3306)/")
 	assert.NoError(t, err)
 	defer db.Close()
@@ -51,6 +52,7 @@ func TestScrapeTableSchema_Scrape(t *testing.T) {
 		_, err = db.Exec("INSERT INTO " + name + "." + name + " VALUES(" + strconv.Itoa(row) + ")")
 		assert.NoError(t, err)
 		ch := make(chan prometheus.Metric)
+		//nolint:wsl
 		go func() {
 			if err = (ScrapeTableSchema{}).Scrape(context.Background(), db, ch); err != nil {
 				t.Errorf("error calling function on test: %s", err)
