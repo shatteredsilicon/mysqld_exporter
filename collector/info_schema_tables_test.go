@@ -13,7 +13,7 @@ import (
 )
 
 func TestScrapeTableSchema_Scrape(t *testing.T) {
-	db, err := sql.Open("mysql", "root:secret@tcp(127.0.0.1:3306)/")
+	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:3306)/")
 	assert.NoError(t, err)
 	defer db.Close()
 
