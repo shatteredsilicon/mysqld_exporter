@@ -265,7 +265,7 @@ func newHandler(cfg *webAuth, db *sql.DB, metrics collector.Metrics, scrapers []
 		// If there is no global connection pool then create new.
 		var err error
 		if db == nil {
-			db, err = connectDB(dsn)
+			db, err = newDB(dsn)
 			if err != nil {
 				log.Fatalln("Error opening connection to database:", err)
 				return
@@ -365,7 +365,7 @@ func main() {
 	var db *sql.DB
 	var err error
 	if *exporterGlobalConnPool {
-		db, err = connectDB(dsn)
+		db, err = newDB(dsn)
 		if err != nil {
 			log.Fatalln("Error opening connection to database:", err)
 			return
@@ -507,27 +507,6 @@ func enabledScrapers(scraperFlags map[collector.Scraper]*bool) (all, hr, mr, lr 
 	}
 
 	return all, hr, mr, lr
-}
-
-func connectDB(dsn string) (*sql.DB, error) {
-	var dnsWithDisabledCache string
-	if strings.Contains(dsn, "?") {
-		dnsWithDisabledCache = dsn + "&"
-	} else {
-		dnsWithDisabledCache = dsn + "?"
-	}
-
-	// Disable cache for MySQL 8.0 and higher. Lower versions has disabled cache as default.
-	// Behvaior for all verisions will be same.
-	dnsWithDisabledCache += `information_schema_stats_expiry=0`
-
-	// First try connection with parameter to disable cache
-	// If MySQL version is lower than 8.0 it fails and ordinary connection will be opened.
-	db, err := newDB(dnsWithDisabledCache)
-	if err != nil {
-		return newDB(dsn)
-	}
-	return db, err
 }
 
 func newDB(dsn string) (*sql.DB, error) {
