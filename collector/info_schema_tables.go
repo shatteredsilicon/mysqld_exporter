@@ -78,12 +78,12 @@ func (ScrapeTableSchema) Version() float64 {
 }
 
 // Scrape collects data.
-func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) (e error) {
+func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) (e error) { //nolint:funlen
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() {
+	defer func() { //nolint:wsl
 		err := conn.Close()
 		if err != nil {
 			e = err
