@@ -101,7 +101,7 @@ func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 		dbList = strings.Split(*tableSchemaDatabases, ",")
 	}
 
-	// Start transaction ensure that all queries will use same session
+	// Start transaction ensure that all queries will use same session.
 	tx, _ := db.Begin()
 	// We dont care about error, because it return error for every MySQL lower then 8.0
 	db.Exec("set session information_schema_stats_expiry=0") //nolint:errcheck
