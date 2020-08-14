@@ -5,11 +5,10 @@ package collector
 import (
 	"context"
 	"database/sql"
-	"reflect"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/stretchr/testify/assert"
+	"github.com/smartystreets/goconvey/convey"
 )
 
 func TestScrapeTableSchema(t *testing.T) { //nolint:unused
@@ -35,7 +34,9 @@ func TestScrapeTableSchema(t *testing.T) { //nolint:unused
 	}()
 
 	_, err = db.Exec("CREATE TABLE IF NOT EXISTS " + dbName + "." + tableName + " (id int(64))")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer func() { //nolint:wsl
 		_, err = db.Exec("DROP TABLE " + dbName + "." + tableName)
 		if err != nil {
@@ -83,7 +84,5 @@ func addRowAndCheckRowsCount(t *testing.T, ctx context.Context, db *sql.DB, dbNa
 	}
 	// Variable got.value contains actual rows count in table.
 	// Should be equal to count of calling this method.
-	if !reflect.DeepEqual(expect, got) {
-		t.Errorf("expected %+v, but got %+v", expect, got)
-	}
+	convey.ShouldEqual(got, expect)
 }
