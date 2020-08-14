@@ -66,7 +66,7 @@ func addRowAndCheckRowsCount(t *testing.T, ctx context.Context, db *sql.DB, dbNa
 		close(ch)
 	}()
 
-	// For test is important only second recieve to channel.
+	// For test is important only second receive to channel.
 	// Others can be ignored.
 	<-ch
 	got := readMetric(<-ch)
