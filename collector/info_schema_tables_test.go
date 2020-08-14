@@ -67,6 +67,6 @@ func addRowAndCheckRowsCount(t *testing.T, ctx context.Context, db *sql.DB, dbNa
 		metricType: 1,
 	}
 	// Variable got.value contains actual rows count in table.
-	// Should be equal to number of calling this method.
+	// Should be equal to count of calling this method.
 	assert.Equal(t, expected, got)
 }
