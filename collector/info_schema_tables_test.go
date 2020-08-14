@@ -22,14 +22,14 @@ func TestScrapeTableSchema(t *testing.T) { //nolint:unused
 
 	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS " + dbName)
 	assert.NoError(t, err)
-	defer func() {
+	defer func() { //nolint:wsl
 		_, err = db.Exec("DROP DATABASE " + dbName)
 		assert.NoError(t, err)
 	}()
 
 	_, err = db.Exec("CREATE TABLE IF NOT EXISTS " + dbName + "." + tableName + " (id int(64))")
 	assert.NoError(t, err)
-	defer func() {
+	defer func() { //nolint:wsl
 		_, err = db.Exec("DROP TABLE " + dbName + "." + tableName)
 		assert.NoError(t, err)
 	}()
@@ -41,7 +41,7 @@ func TestScrapeTableSchema(t *testing.T) { //nolint:unused
 	addRowAndCheckRowsCount(t, ctx, db, dbName, tableName, 2)
 }
 
-func addRowAndCheckRowsCount(t *testing.T, ctx context.Context, db *sql.DB, dbName, tableName string, expectedRowsCount float64) {
+func addRowAndCheckRowsCount(t *testing.T, ctx context.Context, db *sql.DB, dbName, tableName string, expectedRowsCount float64) { //nolint:go-lint
 	_, err := db.Exec("INSERT INTO " + dbName + "." + tableName + " VALUES(50)")
 	assert.NoError(t, err)
 	ch := make(chan prometheus.Metric)
