@@ -85,7 +85,7 @@ func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 	}
 	defer func() { //nolint:wsl
 		err := conn.Close()
-		if err != nil {
+		if err != nil && e == nil {
 			e = err
 		}
 	}()
