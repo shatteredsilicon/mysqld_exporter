@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/percona/exporter_shared"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -515,7 +514,6 @@ func newDB(dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	db.SetMaxOpenConns(*exporterMaxOpenConns)
 	db.SetMaxIdleConns(*exporterMaxIdleConns)
 	db.SetConnMaxLifetime(*exporterConnMaxLifetime)
