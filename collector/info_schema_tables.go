@@ -78,10 +78,27 @@ func (ScrapeTableSchema) Version() float64 {
 }
 
 // Scrape collects data.
-func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) (e error) { //nolint:funlen
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { //nolint:wsl
+		err := conn.Close()
+		if err != nil && e == nil {
+			e = err
+		}
+	}()
+
+	// This query will affect only 8.0 and higher versions of MySQL, othervise it will be ignored
+	_, err = conn.ExecContext(ctx, "/*!80000 set session information_schema_stats_expiry=0 */")
+	if err != nil {
+		return err
+	}
+
 	var dbList []string
 	if *tableSchemaDatabases == "*" {
-		dbListRows, err := db.QueryContext(ctx, dbListQuery)
+		dbListRows, err := conn.QueryContext(ctx, dbListQuery)
 		if err != nil {
 			return err
 		}
@@ -102,7 +119,7 @@ func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 	}
 
 	for _, database := range dbList {
-		tableSchemaRows, err := db.QueryContext(ctx, fmt.Sprintf(tableSchemaQuery, database))
+		tableSchemaRows, err := conn.QueryContext(ctx, fmt.Sprintf(tableSchemaQuery, database))
 		if err != nil {
 			return err
 		}
