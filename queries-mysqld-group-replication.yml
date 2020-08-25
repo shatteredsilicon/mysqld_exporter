@@ -3,28 +3,28 @@ mysql_perf_schema_replication_group:
   metrics:
     - channel_name:
         usage: "LABEL"
-        description: "Collect metrics from performance_schema.replication_group_members"
+        description: "Name of the Group Replication channel."
     - member_id:
         usage: "LABEL"
-        description: "Collect metrics from performance_schema.replication_group_members"
+        description: "The member server UUID. This has a different value for each member in the group."
     - member_host:
         usage: "LABEL"
-        description: "Collect metrics from performance_schema.replication_group_members"
+        description: "Network address of this member (host name or IP address)."
     - member_port: 
         usage: "LABEL"
-        description: "Collect metrics from performance_schema.replication_group_members"
+        description: "Port on which the server is listening."
     - member_state:
         usage: "LABEL"
-        description: "Collect metrics from performance_schema.replication_group_members"
+        description: "Current state of this member."
     - member_role:
         usage: "LABEL"
-        description: "Collect metrics from performance_schema.replication_group_members"
+        description: "Role of the member in the group, either PRIMARY or SECONDARY."
     - member_version:
         usage: "LABEL"
-        description: "Collect metrics from performance_schema.replication_group_members"
+        description: "MySQL version of the member."
     - member_info:
         usage: "GAUGE"
-        description: "Show Group Replication Server States"
+        description: "Show Group Replication Server States."
 
 mysql_perf_schema:
   query: "SELECT COUNT_TRANSACTIONS_IN_QUEUE as transactions_in_queue, COUNT_TRANSACTIONS_CHECKED as transactions_checked_total, COUNT_CONFLICTS_DETECTED as conflicts_detected_total, COUNT_TRANSACTIONS_ROWS_VALIDATING as transactions_rows_validating_total, COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE as transactions_remote_in_applier_queue, COUNT_TRANSACTIONS_REMOTE_APPLIED as transactions_remote_applied_total, COUNT_TRANSACTIONS_LOCAL_PROPOSED as transactions_local_proposed_total, COUNT_TRANSACTIONS_LOCAL_ROLLBACK as transactions_local_rollback_total FROM performance_schema.replication_group_member_stats WHERE MEMBER_ID=@@server_uuid"
@@ -70,19 +70,19 @@ ON applier_status.channel_name = conn_status.channel_name WHERE conn_status.serv
   metrics:
     - channel_name:
         usage: "LABEL"
-        description: ""
+        description: "The replication channel which this row is displaying. There is always a default replication channel, and more replication channels can be added."
     - IO_thread:
         usage: "LABEL"
-        description: ""
+        description: "ON (thread exists and is active or idle), OFF (thread no longer exists), or CONNECTING (thread exists and is connecting to the source)."
     - SQL_thread:
         usage: "LABEL"
-        description: ""
+        description: "ON (thread exists and is active or idle) or OFF (thread no longer exists)."
     - last_queued_transaction:
         usage: "LABEL"
-        description: ""
+        description: "The global transaction ID (GTID) of the last transaction that was queued to the relay log."
     - last_applied_transaction:
         usage: "LABEL"
-        description: ""
+        description: "The global transaction ID (GTID) of the last transaction applied by this worker."
     - rep_delay_seconds:
         usage: "GAUGE"
         description: ""
