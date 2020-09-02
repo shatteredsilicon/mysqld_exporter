@@ -26,7 +26,7 @@ mysql_perf_schema_replication_group:
         usage: "GAUGE"
         description: "Show Group Replication Server States."
 
-mysql_perf_schema_replication_group:
+mysql_perf_schema_replication_group_5:
   query: "SELECT CHANNEL_NAME as channel_name, MEMBER_ID as member_id, MEMBER_HOST as member_host, MEMBER_PORT as member_port, MEMBER_STATE as member_state, CASE WHEN MEMBER_STATE = 'ONLINE' THEN 1 WHEN MEMBER_STATE = 'RECOVERING' THEN 2 WHEN MEMBER_STATE = 'OFFLINE' THEN 3 WHEN MEMBER_STATE = 'ERROR' THEN 4 WHEN MEMBER_STATE = 'UNREACHABLE' THEN 5 END as member_info FROM performance_schema.replication_group_members WHERE MEMBER_ID=@@server_uuid"
   metrics:
     - channel_name:
@@ -77,7 +77,7 @@ mysql_perf_schema:
         usage: "GAUGE"
         description: "Number of transactions which originated on this member and were rolled back by the group."
 
-mysql_perf_schema:
+mysql_perf_schema_5:
   query: "SELECT COUNT_TRANSACTIONS_IN_QUEUE as transactions_in_queue, COUNT_TRANSACTIONS_CHECKED as transactions_checked_total, COUNT_CONFLICTS_DETECTED as conflicts_detected_total, COUNT_TRANSACTIONS_ROWS_VALIDATING as transactions_rows_validating_total FROM performance_schema.replication_group_member_stats WHERE MEMBER_ID=@@server_uuid;"
   metrics:
     - transactions_in_queue:
