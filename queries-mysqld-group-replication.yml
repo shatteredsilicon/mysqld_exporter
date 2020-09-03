@@ -1,0 +1,98 @@
+mysql_perf_schema_replication_group:
+  query: "SELECT CHANNEL_NAME as channel_name, MEMBER_ID as member_id, MEMBER_HOST as member_host, MEMBER_PORT as member_port, MEMBER_STATE as member_state, MEMBER_ROLE as member_role, MEMBER_VERSION as member_version, CASE WHEN MEMBER_STATE = 'ONLINE' THEN 1 WHEN MEMBER_STATE = 'RECOVERING' THEN 2 WHEN MEMBER_STATE = 'OFFLINE' THEN 3 WHEN MEMBER_STATE = 'ERROR' THEN 4 WHEN MEMBER_STATE = 'UNREACHABLE' THEN 5 END as member_info FROM performance_schema.replication_group_members WHERE MEMBER_ID=@@server_uuid"
+  metrics:
+    - channel_name:
+        usage: "LABEL"
+        description: "Name of the Group Replication channel."
+    - member_id:
+        usage: "LABEL"
+        description: "The member server UUID. This has a different value for each member in the group."
+    - member_host:
+        usage: "LABEL"
+        description: "Network address of this member (host name or IP address)."
+    - member_port: 
+        usage: "LABEL"
+        description: "Port on which the server is listening."
+    - member_state:
+        usage: "LABEL"
+        description: "Current state of this member."
+    - member_role:
+        usage: "LABEL"
+        description: "Role of the member in the group, either PRIMARY or SECONDARY."
+    - member_version:
+        usage: "LABEL"
+        description: "MySQL version of the member."
+    - member_info:
+        usage: "GAUGE"
+        description: "Show Group Replication Server States."
+
+mysql_perf_schema_replication_group_5:
+  query: "SELECT CHANNEL_NAME as channel_name, MEMBER_ID as member_id, MEMBER_HOST as member_host, MEMBER_PORT as member_port, MEMBER_STATE as member_state, CASE WHEN MEMBER_STATE = 'ONLINE' THEN 1 WHEN MEMBER_STATE = 'RECOVERING' THEN 2 WHEN MEMBER_STATE = 'OFFLINE' THEN 3 WHEN MEMBER_STATE = 'ERROR' THEN 4 WHEN MEMBER_STATE = 'UNREACHABLE' THEN 5 END as member_info FROM performance_schema.replication_group_members WHERE MEMBER_ID=@@server_uuid and (SELECT SUBSTRING(@@VERSION,1,1) = 5)"
+  metrics:
+    - channel_name:
+        usage: "LABEL"
+        description: "Name of the Group Replication channel."
+    - member_id:
+        usage: "LABEL"
+        description: "The member server UUID. This has a different value for each member in the group."
+    - member_host:
+        usage: "LABEL"
+        description: "Network address of this member (host name or IP address)."
+    - member_port:
+        usage: "LABEL"
+        description: "Port on which the server is listening."
+    - member_state:
+        usage: "LABEL"
+        description: "Current state of this member."
+    - member_info:
+        usage: "GAUGE"
+        description: "Show Group Replication Server States."
+
+
+mysql_perf_schema:
+  query: "SELECT COUNT_TRANSACTIONS_IN_QUEUE as transactions_in_queue, COUNT_TRANSACTIONS_CHECKED as transactions_checked_total, COUNT_CONFLICTS_DETECTED as conflicts_detected_total, COUNT_TRANSACTIONS_ROWS_VALIDATING as transactions_rows_validating_total, COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE as transactions_remote_in_applier_queue, COUNT_TRANSACTIONS_REMOTE_APPLIED as transactions_remote_applied_total, COUNT_TRANSACTIONS_LOCAL_PROPOSED as transactions_local_proposed_total, COUNT_TRANSACTIONS_LOCAL_ROLLBACK as transactions_local_rollback_total FROM performance_schema.replication_group_member_stats WHERE MEMBER_ID=@@server_uuid"
+  metrics:
+    - transactions_in_queue:
+        usage: "GAUGE"
+        description: "The number of transactions in the queue pending conflict detection checks."
+    - transactions_checked_total:
+        usage: "GAUGE"
+        description: "The number of transactions that have been checked for conflicts."
+    - conflicts_detected_total:
+        usage: "GAUGE"
+        description: "The number of transactions that have not passed the conflict detection check."
+    - transactions_rows_validating_total:
+        usage: "GAUGE"
+        description: "Number of transaction rows which can be used for certification, but have not been garbage collected."
+    - transactions_remote_in_applier_queue:
+        usage: "GAUGE"
+        description: "The number of transactions that this member has received from the replication group which are waiting to be applied."
+    - transactions_remote_applied_total:
+        usage: "GAUGE"
+        description: "Number of transactions this member has received from the group and applied."
+    - transactions_local_proposed_total:
+        usage: "GAUGE"
+        description: "Number of transactions which originated on this member and were sent to the group."
+    - transactions_local_rollback_total:
+        usage: "GAUGE"
+        description: "Number of transactions which originated on this member and were rolled back by the group."
+
+mysql_perf_schema_5:
+  query: "SELECT COUNT_TRANSACTIONS_IN_QUEUE as transactions_in_queue, COUNT_TRANSACTIONS_CHECKED as transactions_checked_total, COUNT_CONFLICTS_DETECTED as conflicts_detected_total, COUNT_TRANSACTIONS_ROWS_VALIDATING as transactions_rows_validating_total FROM performance_schema.replication_group_member_stats WHERE MEMBER_ID=@@server_uuid and (SELECT SUBSTRING(@@VERSION,1,1) = 5)"
+  metrics:
+    - transactions_in_queue:
+        usage: "GAUGE"
+        description: "The number of transactions in the queue pending conflict detection checks."
+    - transactions_checked_total:
+        usage: "GAUGE"
+        description: "The number of transactions that have been checked for conflicts."
+    - conflicts_detected_total:
+        usage: "GAUGE"
+        description: "The number of transactions that have not passed the conflict detection check."
+    - transactions_rows_validating_total:
+        usage: "GAUGE"
+        description: "Number of transaction rows which can be used for certification, but have not been garbage collected."
+    - transactions_local_rollback_total:
+        usage: "GAUGE"
+        description: "Number of transactions which originated on this member and were rolled back by the group."
+
