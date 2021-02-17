@@ -128,6 +128,10 @@ func (ScrapeInfoSchemaInnodbTablespaces) Scrape(ctx context.Context, db *sql.DB,
 }
 
 func setInnodbTablespacesQuery(ctx context.Context, db *sql.DB) {
+	if innodbTablespacesQuery != "" {
+		return // this is to make it able to be tested
+	}
+
 	var res string
 	query := "SHOW TABLES FROM information_schema LIKE 'INNODB_SYS_TABLESPACES'"
 

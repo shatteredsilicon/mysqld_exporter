@@ -11,6 +11,7 @@ import (
 )
 
 func TestScrapeInfoSchemaInnodbTablespaces(t *testing.T) {
+	innodbTablespacesQuery = innodbTablespacesQueryv57
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("error opening a stub database connection: %s", err)
