@@ -318,7 +318,7 @@ func main() {
 
 	// landingPage contains the HTML served at '/'.
 	// TODO: Make this nicer and more informative.
-	var landingPage = []byte(`<html>
+	landingPage := []byte(`<html>
 <head><title>MySQLd exporter</title></head>
 <body>
 <h1>MySQL 3-in-1 exporter</h1>

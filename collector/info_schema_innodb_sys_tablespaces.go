@@ -5,11 +5,14 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-const innodbTablespacesQuery = `
+const (
+	innodbTablespacesQueryv57 = `
 	SELECT
 	    SPACE,
 	    NAME,
@@ -20,6 +23,18 @@ const innodbTablespacesQuery = `
 	    ALLOCATED_SIZE
 	  FROM information_schema.innodb_sys_tablespaces
 	`
+	innodbTablespacesQueryv80 = `
+	SELECT
+	    SPACE,
+	    NAME,
+	    'NONE' as FILE_FORMAT,
+	    ifnull(ROW_FORMAT, 'NONE') as ROW_FORMAT,
+	    ifnull(SPACE_TYPE, 'NONE') as SPACE_TYPE,
+	    FILE_SIZE,
+	    ALLOCATED_SIZE
+	  FROM information_schema.innodb_tablespaces
+	`
+)
 
 var (
 	infoSchemaInnodbTablesspaceInfoDesc = prometheus.NewDesc(
@@ -37,6 +52,9 @@ var (
 		"The actual size of the file, which is the amount of space allocated on disk.",
 		[]string{"tablespace_name"}, nil,
 	)
+
+	doOnce                 sync.Once
+	innodbTablespacesQuery string
 )
 
 // ScrapeInfoSchemaInnodbTablespaces collects from `information_schema.innodb_sys_tablespaces`.
@@ -54,11 +72,15 @@ func (ScrapeInfoSchemaInnodbTablespaces) Help() string {
 
 // Version of MySQL from which scraper is available.
 func (ScrapeInfoSchemaInnodbTablespaces) Version() float64 {
-	return 5.7
+	return 8.0
 }
 
 // Scrape collects data.
 func (ScrapeInfoSchemaInnodbTablespaces) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+	doOnce.Do(func() {
+		setInnodbTablespacesQuery(ctx, db)
+	})
+
 	tablespacesRows, err := db.QueryContext(ctx, innodbTablespacesQuery)
 	if err != nil {
 		return err
@@ -103,4 +125,25 @@ func (ScrapeInfoSchemaInnodbTablespaces) Scrape(ctx context.Context, db *sql.DB,
 	}
 
 	return nil
+}
+
+func setInnodbTablespacesQuery(ctx context.Context, db *sql.DB) {
+	if innodbTablespacesQuery != "" {
+		return // this is to make it able to be tested
+	}
+
+	var res string
+	query := "SHOW TABLES FROM information_schema LIKE 'INNODB_SYS_TABLESPACES'"
+
+	// By default, assume MySQL 5.7+
+	innodbTablespacesQuery = innodbTablespacesQueryv57
+
+	err := db.QueryRowContext(ctx, query).Scan(&res)
+	if err != nil {
+		// if INNODB_SYS_TABLESPACES doesn't exists, assume it it MySQL 8+.
+		// The table was renamed and the file_format field was removed
+		if errors.Is(err, sql.ErrNoRows) {
+			innodbTablespacesQuery = innodbTablespacesQueryv80
+		}
+	}
 }
