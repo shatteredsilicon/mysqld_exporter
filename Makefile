@@ -60,9 +60,9 @@ format:           ## Format the code
 
 FILES = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
-reformat:         ## Format source code.
+fumpt:            ## Format source code using fumpt and fumports.
 	@gofumpt -w -s $(FILES)
-	@gofumports -local github.com/percona/pmm-managed -l -w $(FILES)
+	@gofumports -local github.com/percona/mysqld_exporter -l -w $(FILES)
 
 vet:              ## Run vet
 	@echo ">> vetting code"

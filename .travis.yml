@@ -60,7 +60,7 @@ before_script:
   - docker-compose up -d
 
 script:
-- make
+- make all
 - make test
 
 notifications:
