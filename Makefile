@@ -82,6 +82,7 @@ docker:           ## Build docker image
 
 promu:            ## Install promu
 	@GOOS=$(shell uname -s | tr A-Z a-z) \
+		GO111MODULE=on \
 		GOARCH=$(subst x86_64,amd64,$(patsubst i%86,386,$(shell uname -m))) \
 		$(GO) get -u github.com/prometheus/promu
 
