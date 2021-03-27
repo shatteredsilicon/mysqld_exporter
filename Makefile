@@ -32,7 +32,6 @@ env-up:           ## Start MySQL and copy ssl certificates to /tmp
 	@docker container cp mysqld_exporter_db:/var/lib/mysql/client-cert.pem $(TMPDIR)
 	@docker container cp mysqld_exporter_db:/var/lib/mysql/client-key.pem $(TMPDIR)
 	@docker container cp mysqld_exporter_db:/var/lib/mysql/ca.pem $(TMPDIR)
-	@docker exec mysqld_exporter_db mysql -e 'CREATE USER "fry"@"%" IDENTIFIED BY "pass" REQUIRE X509';
 
 env-down:         ## Stop MySQL and clean up certs
 	@docker-compose down
