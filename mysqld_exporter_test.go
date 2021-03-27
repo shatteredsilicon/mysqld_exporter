@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -113,6 +114,50 @@ func TestParseMycnf(t *testing.T) {
 			_, err := parseMycnf([]byte(badConfig4))
 			convey.So(err, convey.ShouldNotBeNil)
 		})
+	})
+}
+
+func TestSSL(t *testing.T) {
+	if _, err := os.Stat(filepath.Join(os.TempDir(), "client-cert.pem")); os.IsNotExist(err) {
+		t.Skip("Use make env-up to run this test")
+	}
+
+	db, err := newDB("root:@tcp(127.0.0.1:3306)/")
+	convey.Convey("Local tcp connection", t, func() {
+		convey.So(err, convey.ShouldBeNil)
+	})
+
+	convey.Convey("Create test user", t, func() {
+		_, err = db.Exec("CREATE USER 'fry'@'%' IDENTIFIED BY 'pass' REQUIRE X509")
+		convey.So(err, convey.ShouldBeNil)
+
+		_, err = db.Exec("GRANT ALL PRIVILEGES ON *.* TO 'fry'@'%' WITH GRANT OPTION")
+		convey.So(err, convey.ShouldBeNil)
+
+		_, err = db.Exec("FLUSH PRIVILEGES")
+		convey.So(err, convey.ShouldBeNil)
+	})
+
+	sslCA := filepath.Join(os.TempDir(), "ca.pem")
+	sslCert := filepath.Join(os.TempDir(), "client-cert.pem")
+	sslKey := filepath.Join(os.TempDir(), "client-key.pem")
+	skipVerify := true
+	mysqlSSLSkipVerify = &skipVerify
+
+	convey.Convey("TestSSL connection", t, func() {
+		convey.Convey("Local tcp connection", func() {
+			convey.So(customizeTLS(sslCA, sslCert, sslKey), convey.ShouldBeNil)
+		})
+
+		db, err := newDB("fry:pass@tcp(127.0.0.1:3306)/?tls=custom")
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(db, convey.ShouldNotBeNil)
+		convey.So(db.Ping(), convey.ShouldBeNil)
+	})
+
+	convey.Convey("Drop test user", t, func() {
+		_, err = db.Exec("DROP USER 'fry'@'%'")
+		convey.So(err, convey.ShouldBeNil)
 	})
 }
 

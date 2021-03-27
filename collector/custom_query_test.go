@@ -30,7 +30,6 @@ experiment_garden:
 
 func TestScrapeCustomQueriesCounter(t *testing.T) {
 	convey.Convey("Custom queries counter", t, func() {
-
 		tmpFileName := createTmpFile(t, string(HR), customQueryCounter)
 		defer os.Remove(tmpFileName)
 
@@ -100,7 +99,6 @@ experiment_garden:
 
 func TestScrapeCustomQueriesDuration(t *testing.T) {
 	convey.Convey("Custom queries duration", t, func() {
-
 		tmpFileName := createTmpFile(t, string(HR), customQueryDuration)
 		defer os.Remove(tmpFileName)
 
@@ -164,7 +162,6 @@ experiment_garden:
 
 func TestScrapeCustomQueriesDbError(t *testing.T) {
 	convey.Convey("Custom queries db error", t, func() {
-
 		tmpFileName := createTmpFile(t, string(HR), customQueryNoDb)
 		defer os.Remove(tmpFileName)
 
@@ -197,7 +194,6 @@ const customQueryIncorrectYaml = `
 
 func TestScrapeCustomQueriesIncorrectYaml(t *testing.T) {
 	convey.Convey("Custom queries incorrect yaml", t, func() {
-
 		tmpFileName := createTmpFile(t, string(HR), customQueryIncorrectYaml)
 		defer os.Remove(tmpFileName)
 
@@ -217,13 +213,11 @@ func TestScrapeCustomQueriesIncorrectYaml(t *testing.T) {
 			convey.So(err, convey.ShouldBeError, "failed to add custom queries:incorrect yaml format for bar")
 		})
 		close(ch)
-
 	})
 }
 
 func TestScrapeCustomQueriesNoFile(t *testing.T) {
 	convey.Convey("Passed as a custom queries unexisted file or path", t, func() {
-
 		*collectCustomQueryHrDirectory = "/wrong/path"
 
 		db, _, err := sqlmock.New()

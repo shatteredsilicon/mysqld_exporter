@@ -12,8 +12,10 @@ import (
 	"github.com/prometheus/common/log"
 )
 
-const queryResponseCheckQuery = `SELECT @@query_response_time_stats`
-const checkQueryResponseTimePlugins = "SELECT COUNT(PLUGIN_NAME) AS c FROM INFORMATION_SCHEMA.PLUGINS WHERE PLUGIN_NAME = 'QUERY_RESPONSE_TIME' AND PLUGIN_STATUS = 'ACTIVE'"
+const (
+	queryResponseCheckQuery       = `SELECT @@query_response_time_stats`
+	checkQueryResponseTimePlugins = "SELECT COUNT(PLUGIN_NAME) AS c FROM INFORMATION_SCHEMA.PLUGINS WHERE PLUGIN_NAME = 'QUERY_RESPONSE_TIME' AND PLUGIN_STATUS = 'ACTIVE'"
+)
 
 var (
 	// Use uppercase for table names, otherwise read/write split will return the same results as total

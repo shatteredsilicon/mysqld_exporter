@@ -56,7 +56,6 @@ func TestScrapeSlaveStatus(t *testing.T) {
 }
 
 func TestScrapeSlaveStatusVersions(t *testing.T) {
-
 	queryTable := []struct {
 		version []driver.Value
 		query   string

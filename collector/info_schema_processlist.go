@@ -120,8 +120,8 @@ var (
 )
 
 func deriveThreadState(command string, state string) string {
-	var normCmd = strings.Replace(strings.ToLower(command), "_", " ", -1)
-	var normState = strings.Replace(strings.ToLower(state), "_", " ", -1)
+	normCmd := strings.Replace(strings.ToLower(command), "_", " ", -1)
+	normState := strings.Replace(strings.ToLower(state), "_", " ", -1)
 	// check if it's already a valid state
 	_, knownState := threadStateCounterMap[normState]
 	if knownState {

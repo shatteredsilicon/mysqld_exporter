@@ -247,7 +247,7 @@ func addQueries(content []byte, exporterMap map[string]MetricMapNamespace, custo
 
 // Turn the MetricMap column mapping into a prometheus descriptor mapping.
 func makeDescMap(metricMaps map[string]map[string]ColumnMapping, exporterMap map[string]MetricMapNamespace) {
-	var metricMap = make(map[string]MetricMapNamespace)
+	metricMap := make(map[string]MetricMapNamespace)
 	for namespace, mappings := range metricMaps {
 		thisMap := make(map[string]MetricMap)
 		// Get the constant labels.
@@ -443,13 +443,13 @@ func queryNamespaceMapping(ctx context.Context, ch chan<- prometheus.Metric,
 	}
 
 	// Make a lookup map for the column indices.
-	var columnIdx = make(map[string]int, len(columnNames))
+	columnIdx := make(map[string]int, len(columnNames))
 	for i, n := range columnNames {
 		columnIdx[n] = i
 	}
 
-	var columnData = make([]interface{}, len(columnNames))
-	var scanArgs = make([]interface{}, len(columnNames))
+	columnData := make([]interface{}, len(columnNames))
+	scanArgs := make([]interface{}, len(columnNames))
 	for i := range columnData {
 		scanArgs[i] = &columnData[i]
 	}
@@ -462,7 +462,7 @@ func queryNamespaceMapping(ctx context.Context, ch chan<- prometheus.Metric,
 		}
 
 		// Get the label values for this row
-		var labels = make([]string, len(mapping.labels))
+		labels := make([]string, len(mapping.labels))
 		var ok bool
 		for idx, columnName := range mapping.labels {
 			labels[idx], ok = dbToString(columnData[columnIdx[columnName]])

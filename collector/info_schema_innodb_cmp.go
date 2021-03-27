@@ -18,35 +18,43 @@ const innodbCmpQuery = `
                   FROM information_schema.INNODB_CMP
                 `
 
-var (
-	// Map known innodb_cmp values to types. Unknown types will be mapped as
-	// untyped.
-	informationSchemaInnodbCmpTypes = map[string]struct {
-		vtype prometheus.ValueType
-		desc  *prometheus.Desc
-	}{
-		"compress_ops": {prometheus.CounterValue,
-			prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmp_compress_ops_total"),
-				"Number of times a B-tree page of the size PAGE_SIZE has been compressed.",
-				[]string{"page_size"}, nil)},
-		"compress_ops_ok": {prometheus.CounterValue,
-			prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmp_compress_ops_ok_total"),
-				"Number of times a B-tree page of the size PAGE_SIZE has been successfully compressed.",
-				[]string{"page_size"}, nil)},
-		"compress_time": {prometheus.CounterValue,
-			prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmp_compress_time_seconds_total"),
-				"Total time in seconds spent in attempts to compress B-tree pages.",
-				[]string{"page_size"}, nil)},
-		"uncompress_ops": {prometheus.CounterValue,
-			prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmp_uncompress_ops_total"),
-				"Number of times a B-tree page has been uncompressed.",
-				[]string{"page_size"}, nil)},
-		"uncompress_time": {prometheus.CounterValue,
-			prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmp_uncompress_time_seconds_total"),
-				"Total time in seconds spent in uncompressing B-tree pages.",
-				[]string{"page_size"}, nil)},
-	}
-)
+// Map known innodb_cmp values to types. Unknown types will be mapped as
+// untyped.
+var informationSchemaInnodbCmpTypes = map[string]struct {
+	vtype prometheus.ValueType
+	desc  *prometheus.Desc
+}{
+	"compress_ops": {
+		prometheus.CounterValue,
+		prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmp_compress_ops_total"),
+			"Number of times a B-tree page of the size PAGE_SIZE has been compressed.",
+			[]string{"page_size"}, nil),
+	},
+	"compress_ops_ok": {
+		prometheus.CounterValue,
+		prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmp_compress_ops_ok_total"),
+			"Number of times a B-tree page of the size PAGE_SIZE has been successfully compressed.",
+			[]string{"page_size"}, nil),
+	},
+	"compress_time": {
+		prometheus.CounterValue,
+		prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmp_compress_time_seconds_total"),
+			"Total time in seconds spent in attempts to compress B-tree pages.",
+			[]string{"page_size"}, nil),
+	},
+	"uncompress_ops": {
+		prometheus.CounterValue,
+		prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmp_uncompress_ops_total"),
+			"Number of times a B-tree page has been uncompressed.",
+			[]string{"page_size"}, nil),
+	},
+	"uncompress_time": {
+		prometheus.CounterValue,
+		prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmp_uncompress_time_seconds_total"),
+			"Total time in seconds spent in uncompressing B-tree pages.",
+			[]string{"page_size"}, nil),
+	},
+}
 
 // ScrapeInnodbCmp collects from `information_schema.innodb_cmp`.
 type ScrapeInnodbCmp struct{}
