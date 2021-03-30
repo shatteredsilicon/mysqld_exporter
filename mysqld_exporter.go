@@ -237,7 +237,11 @@ func parseMycnf(config interface{}) (string, error) {
 			tlsErr = fmt.Errorf("failed to register a custom TLS configuration for mysql dsn: %s", tlsErr)
 			return dsn, tlsErr
 		}
-		dsn = fmt.Sprintf("%s?tls=custom", dsn)
+		sep := "?"
+		if strings.Contains(dsn, "?") {
+			dsn += "&"
+		}
+		dsn = fmt.Sprintf("%s%stls=custom", dsn, sep)
 	}
 
 	log.Debugln(dsn)
@@ -385,6 +389,12 @@ func main() {
 		}
 	}
 
+	// Setup extra params for the DSN, default to having a lock timeout.
+	dsnParams := []string{fmt.Sprintf(timeoutParam, *exporterLockTimeout)}
+	if *exporterLogSlowFilter {
+		dsnParams = append(dsnParams, sessionSettingsParam)
+	}
+
 	// The parseMycnf function will set the TLS config in case certificates are being defined in
 	// the config file. If the user also specified command line parameters, these parameters should
 	// override the ones from the cnf file.
@@ -392,15 +402,9 @@ func main() {
 		if err := customizeTLS(*mysqlSSLCAFile, *mysqlSSLCertFile, *mysqlSSLKeyFile); err != nil {
 			log.Fatalf("failed to register a custom TLS configuration for mysql dsn: %s", err)
 		}
-		if !strings.Contains(dsn, "?tls=custom") { // maybe it was already added by the config file parser
-			dsn = fmt.Sprintf("%s?tls=custom", dsn)
+		if !strings.Contains(dsn, "tls=custom") { // maybe it was already added by the config file parser
+			dsnParams = append(dsnParams, "tls=custom")
 		}
-	}
-
-	// Setup extra params for the DSN, default to having a lock timeout.
-	dsnParams := []string{fmt.Sprintf(timeoutParam, *exporterLockTimeout)}
-	if *exporterLogSlowFilter {
-		dsnParams = append(dsnParams, sessionSettingsParam)
 	}
 
 	if strings.Contains(dsn, "?") {
