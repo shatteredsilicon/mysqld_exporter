@@ -232,20 +232,29 @@ func parseMycnf(config interface{}) (string, error) {
 	sslCA := cfg.Section("client").Key("ssl-ca").String()
 	sslCert := cfg.Section("client").Key("ssl-cert").String()
 	sslKey := cfg.Section("client").Key("ssl-key").String()
-	if sslCA != "" {
+	if sslCA != "" || (sslCert != "" && sslKey != "") {
 		if tlsErr := customizeTLS(sslCA, sslCert, sslKey); tlsErr != nil {
 			tlsErr = fmt.Errorf("failed to register a custom TLS configuration for mysql dsn: %s", tlsErr)
 			return dsn, tlsErr
 		}
-		sep := "?"
-		if strings.Contains(dsn, "?") {
-			dsn += "&"
+		dsn, err = setTLSConfig(dsn)
+		if err != nil {
+			return "", errors.Wrap(err, "cannot set TLS configuration")
 		}
-		dsn = fmt.Sprintf("%s%stls=custom", dsn, sep)
 	}
 
 	log.Debugln(dsn)
 	return dsn, nil
+}
+
+func setTLSConfig(dsn string) (string, error) {
+	cfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return "", err
+	}
+	cfg.TLSConfig = "custom"
+
+	return cfg.FormatDSN(), nil
 }
 
 func init() {
@@ -402,11 +411,15 @@ func main() {
 		if err := customizeTLS(*mysqlSSLCAFile, *mysqlSSLCertFile, *mysqlSSLKeyFile); err != nil {
 			log.Fatalf("failed to register a custom TLS configuration for mysql dsn: %s", err)
 		}
-		if !strings.Contains(dsn, "tls=custom") { // maybe it was already added by the config file parser
-			dsnParams = append(dsnParams, "tls=custom")
+		var err error
+		dsn, err = setTLSConfig(dsn)
+		if err != nil {
+			log.Fatalf("failed to register a custom TLS configuration for mysql dsn: %s", err)
 		}
 	}
 
+	// This could be improved using the driver's DSN parse and config format functions but this is
+	// how upstream does it.
 	if strings.Contains(dsn, "?") {
 		dsn += "&"
 	} else {

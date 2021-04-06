@@ -234,6 +234,38 @@ func TestBin(t *testing.T) {
 	})
 }
 
+func TestCustomTLSinDSN(t *testing.T) {
+	testCases := []struct {
+		dsn  string
+		want string
+	}{
+		{
+			dsn:  "user:pass@tcp(127.0.0.1:3306)/",
+			want: "user:pass@tcp(127.0.0.1:3306)/?tls=custom",
+		},
+		{
+			dsn:  "user:pass@tcp(127.0.0.1:3306)/?param1=val1",
+			want: "user:pass@tcp(127.0.0.1:3306)/?tls=custom&param1=val1",
+		},
+		// sessionSettingsParam params are being added if exporterLogSlowFilter is set
+		// This test is not a real case. Upstream is manually adding the sessionSettingsParam
+		// using strings.Join while the driver would parse the dns and convert the , to %2C
+		{
+			dsn:  "user:pass@tcp(127.0.0.1:3306)/?" + sessionSettingsParam,
+			want: "user:pass@tcp(127.0.0.1:3306)/?tls=custom&" + strings.ReplaceAll(sessionSettingsParam, ",", "%2C"),
+		},
+	}
+
+	for _, tc := range testCases {
+		dsn, err := setTLSConfig(tc.dsn)
+
+		convey.Convey("Add TLS=custom", t, func() {
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(dsn, convey.ShouldEqual, tc.want)
+		})
+	}
+}
+
 func testVersion(t *testing.T, data bin) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
