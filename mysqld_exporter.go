@@ -213,7 +213,16 @@ func init() {
 }
 
 func newHandler(cfg *webAuth, db *sql.DB, metrics collector.Metrics, scrapers []collector.Scraper, defaultGatherer bool) http.HandlerFunc {
+	processing := false
 	return func(w http.ResponseWriter, r *http.Request) {
+		if processing {
+			log.Info("Received metrics request while previous still in progress: returning 429 Too Many Requests")
+			http.Error(w, "429 Too Many Requests", http.StatusTooManyRequests)
+			return
+		}
+		processing = true
+		defer func() { processing = false }()
+
 		filteredScrapers := scrapers
 		params := r.URL.Query()["collect[]"]
 		// Use request context for cancellation when connection gets closed.
