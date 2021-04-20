@@ -105,7 +105,7 @@ var (
 	mysqlSSLSkipVerify = kingpin.Flag(
 		"mysql.ssl-skip-verify",
 		"Skip cert verification when connection to MySQL",
-	).Default("true").Bool()
+	).Bool()
 
 	dsn string
 )
