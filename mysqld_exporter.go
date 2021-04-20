@@ -594,6 +594,10 @@ func customizeTLS(sslCA string, sslCert string, sslKey string) error {
 	var tlsCfg tls.Config
 	caBundle := x509.NewCertPool()
 
+	if sslCA != "" && (sslCert == "" || sslKey == "") {
+		return fmt.Errorf("missing certificates. Cannot specify only SSL CA file")
+	}
+
 	// CA is not mandatory. It is OK if we only have ssl-cert and ssl-key.
 	if sslCA != "" {
 		pemCA, err := ioutil.ReadFile(filepath.Clean(sslCA))
