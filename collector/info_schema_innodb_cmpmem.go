@@ -18,7 +18,7 @@ const innodbCmpMemQuery = `
                   FROM information_schema.INNODB_CMPMEM
                 `
 
-//Metric descriptors.
+// Metric descriptors.
 var (
 	// Map known innodb_cmp values to types. Unknown types will be mapped as
 	// untyped.
@@ -26,22 +26,30 @@ var (
 		vtype prometheus.ValueType
 		desc  *prometheus.Desc
 	}{
-		"pages_used": {prometheus.CounterValue,
+		"pages_used": {
+			prometheus.CounterValue,
 			prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmpmem_pages_used_total"),
 				"Number of blocks of the size PAGE_SIZE that are currently in use.",
-				[]string{"page_size", "buffer"}, nil)},
-		"pages_free": {prometheus.CounterValue,
+				[]string{"page_size", "buffer"}, nil),
+		},
+		"pages_free": {
+			prometheus.CounterValue,
 			prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmpmem_pages_free_total"),
 				"Number of blocks of the size PAGE_SIZE that are currently available for allocation.",
-				[]string{"page_size", "buffer"}, nil)},
-		"relocation_ops": {prometheus.CounterValue,
+				[]string{"page_size", "buffer"}, nil),
+		},
+		"relocation_ops": {
+			prometheus.CounterValue,
 			prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmpmem_relocation_ops_total"),
 				"Number of times a block of the size PAGE_SIZE has been relocated.",
-				[]string{"page_size", "buffer"}, nil)},
-		"relocation_time": {prometheus.CounterValue,
+				[]string{"page_size", "buffer"}, nil),
+		},
+		"relocation_time": {
+			prometheus.CounterValue,
 			prometheus.NewDesc(prometheus.BuildFQName(namespace, informationSchema, "innodb_cmpmem_relocation_time_seconds_total"),
 				"Total time in microseconds spent in relocating blocks of the size PAGE_SIZE.",
-				[]string{"page_size", "buffer"}, nil)},
+				[]string{"page_size", "buffer"}, nil),
+		},
 	}
 )
 
@@ -77,7 +85,6 @@ func (ScrapeInnodbCmpMem) Scrape(ctx context.Context, db *sql.DB, ch chan<- prom
 	// (because clientStatScanArgs is mapped as [ &client, &buffer, &clientData[0], &clientData[1] ... &clientdata[n] ]
 	// To map metrics to names therefore we always range over columnNames[1:]
 	columnNames, err := informationSchemaInnodbCmpMemRows.Columns()
-
 	if err != nil {
 		log.Debugln("INNODB_CMPMEM stats are not available.")
 		return err

@@ -3,18 +3,21 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/percona/exporter_shared"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
@@ -54,6 +57,7 @@ var (
 		"config.my-cnf",
 		"Path to .my.cnf file to read MySQL credentials from.",
 	).Default(path.Join(os.Getenv("HOME"), ".my.cnf")).String()
+
 	exporterLockTimeout = kingpin.Flag(
 		"exporter.lock_wait_timeout",
 		"Set a lock_wait_timeout on the connection to avoid long metadata locking.",
@@ -82,6 +86,26 @@ var (
 		"collect.all",
 		"Collect all metrics.",
 	).Default("false").Bool()
+
+	mysqlSSLCAFile = kingpin.Flag(
+		"mysql.ssl-ca-file",
+		"SSL CA file for the MySQL connection",
+	).ExistingFile()
+
+	mysqlSSLCertFile = kingpin.Flag(
+		"mysql.ssl-cert-file",
+		"SSL Cert file for the MySQL connection",
+	).ExistingFile()
+
+	mysqlSSLKeyFile = kingpin.Flag(
+		"mysql.ssl-key-file",
+		"SSL Key file for the MySQL connection",
+	).ExistingFile()
+
+	mysqlSSLSkipVerify = kingpin.Flag(
+		"mysql.ssl-skip-verify",
+		"Skip cert verification when connection to MySQL",
+	).Bool()
 
 	dsn string
 )
@@ -204,8 +228,33 @@ func parseMycnf(config interface{}) (string, error) {
 	} else {
 		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/", user, password, host, port)
 	}
+
+	sslCA := cfg.Section("client").Key("ssl-ca").String()
+	sslCert := cfg.Section("client").Key("ssl-cert").String()
+	sslKey := cfg.Section("client").Key("ssl-key").String()
+	if sslCA != "" || (sslCert != "" && sslKey != "") {
+		if tlsErr := customizeTLS(sslCA, sslCert, sslKey); tlsErr != nil {
+			tlsErr = fmt.Errorf("failed to register a custom TLS configuration for mysql dsn: %s", tlsErr)
+			return dsn, tlsErr
+		}
+		dsn, err = setTLSConfig(dsn)
+		if err != nil {
+			return "", errors.Wrap(err, "cannot set TLS configuration")
+		}
+	}
+
 	log.Debugln(dsn)
 	return dsn, nil
+}
+
+func setTLSConfig(dsn string) (string, error) {
+	cfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return "", err
+	}
+	cfg.TLSConfig = "custom"
+
+	return cfg.FormatDSN(), nil
 }
 
 func init() {
@@ -353,6 +402,7 @@ func main() {
 		var err error
 		if dsn, err = parseMycnf(*configMycnf); err != nil {
 			log.Fatal(err)
+
 			return
 		}
 	}
@@ -363,16 +413,34 @@ func main() {
 		dsnParams = append(dsnParams, sessionSettingsParam)
 	}
 
+	// The parseMycnf function will set the TLS config in case certificates are being defined in
+	// the config file. If the user also specified command line parameters, these parameters should
+	// override the ones from the cnf file.
+	if *mysqlSSLCAFile != "" || (*mysqlSSLCertFile != "" && *mysqlSSLKeyFile != "") {
+		if err := customizeTLS(*mysqlSSLCAFile, *mysqlSSLCertFile, *mysqlSSLKeyFile); err != nil {
+			log.Fatalf("failed to register a custom TLS configuration for mysql dsn: %s", err)
+		}
+		var err error
+		dsn, err = setTLSConfig(dsn)
+		if err != nil {
+			log.Fatalf("failed to register a custom TLS configuration for mysql dsn: %s", err)
+		}
+	}
+
+	// This could be improved using the driver's DSN parse and config format functions but this is
+	// how upstream does it.
 	if strings.Contains(dsn, "?") {
-		dsn = dsn + "&"
+		dsn += "&"
 	} else {
-		dsn = dsn + "?"
+		dsn += "?"
 	}
 	dsn += strings.Join(dsnParams, "&")
 
 	// Open global connection pool if requested.
 	var db *sql.DB
+
 	var err error
+
 	if *exporterGlobalConnPool {
 		db, err = newDB(dsn)
 		if err != nil {
@@ -529,4 +597,40 @@ func newDB(dsn string) (*sql.DB, error) {
 	db.SetConnMaxLifetime(*exporterConnMaxLifetime)
 
 	return db, nil
+}
+
+func customizeTLS(sslCA string, sslCert string, sslKey string) error {
+	var tlsCfg tls.Config
+	caBundle := x509.NewCertPool()
+
+	if sslCA != "" && (sslCert == "" || sslKey == "") {
+		return fmt.Errorf("missing certificates. Cannot specify only SSL CA file")
+	}
+
+	// CA is not mandatory. It is OK if we only have ssl-cert and ssl-key.
+	if sslCA != "" {
+		pemCA, err := ioutil.ReadFile(filepath.Clean(sslCA))
+		if err != nil {
+			return err
+		}
+		if ok := caBundle.AppendCertsFromPEM(pemCA); ok {
+			tlsCfg.RootCAs = caBundle
+		} else {
+			return errors.Wrapf(err, "failed parse pem-encoded CA certificates from %s", sslCA)
+		}
+	}
+
+	if sslCert != "" && sslKey != "" {
+		certPairs := make([]tls.Certificate, 0, 1)
+		keypair, err := tls.LoadX509KeyPair(sslCert, sslKey)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse pem-encoded SSL cert %s or SSL key %s", sslCert, sslKey)
+		}
+
+		certPairs = append(certPairs, keypair)
+		tlsCfg.Certificates = certPairs
+		tlsCfg.InsecureSkipVerify = *mysqlSSLSkipVerify
+	}
+
+	return mysql.RegisterTLSConfig("custom", &tlsCfg)
 }

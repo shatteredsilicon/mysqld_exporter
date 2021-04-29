@@ -27,7 +27,7 @@ func columnIndex(slaveCols []string, colName string) int {
 }
 
 func columnValue(scanArgs []interface{}, slaveCols []string, colName string) string {
-	var columnIndex = columnIndex(slaveCols, colName)
+	columnIndex := columnIndex(slaveCols, colName)
 	if columnIndex == -1 {
 		return ""
 	}

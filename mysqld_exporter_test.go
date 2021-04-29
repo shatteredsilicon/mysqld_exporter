@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -116,6 +117,50 @@ func TestParseMycnf(t *testing.T) {
 	})
 }
 
+func TestSSL(t *testing.T) {
+	if _, err := os.Stat(filepath.Join(os.TempDir(), "client-cert.pem")); os.IsNotExist(err) {
+		t.Skip("Use make env-up to run this test")
+	}
+
+	db, err := newDB("root:@tcp(127.0.0.1:3306)/")
+	convey.Convey("Local tcp connection", t, func() {
+		convey.So(err, convey.ShouldBeNil)
+	})
+
+	convey.Convey("Create test user", t, func() {
+		_, err = db.Exec("CREATE USER 'fry'@'%' IDENTIFIED BY 'pass' REQUIRE X509")
+		convey.So(err, convey.ShouldBeNil)
+
+		_, err = db.Exec("GRANT ALL PRIVILEGES ON *.* TO 'fry'@'%' WITH GRANT OPTION")
+		convey.So(err, convey.ShouldBeNil)
+
+		_, err = db.Exec("FLUSH PRIVILEGES")
+		convey.So(err, convey.ShouldBeNil)
+	})
+
+	sslCA := filepath.Join(os.TempDir(), "ca.pem")
+	sslCert := filepath.Join(os.TempDir(), "client-cert.pem")
+	sslKey := filepath.Join(os.TempDir(), "client-key.pem")
+	skipVerify := true
+	mysqlSSLSkipVerify = &skipVerify
+
+	convey.Convey("TestSSL connection", t, func() {
+		convey.Convey("Local tcp connection", func() {
+			convey.So(customizeTLS(sslCA, sslCert, sslKey), convey.ShouldBeNil)
+		})
+
+		db, err := newDB("fry:pass@tcp(127.0.0.1:3306)/?tls=custom")
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(db, convey.ShouldNotBeNil)
+		convey.So(db.Ping(), convey.ShouldBeNil)
+	})
+
+	convey.Convey("Drop test user", t, func() {
+		_, err = db.Exec("DROP USER 'fry'@'%'")
+		convey.So(err, convey.ShouldBeNil)
+	})
+}
+
 // bin stores information about path of executable and attached port
 type bin struct {
 	path string
@@ -187,6 +232,38 @@ func TestBin(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestCustomTLSinDSN(t *testing.T) {
+	testCases := []struct {
+		dsn  string
+		want string
+	}{
+		{
+			dsn:  "user:pass@tcp(127.0.0.1:3306)/",
+			want: "user:pass@tcp(127.0.0.1:3306)/?tls=custom",
+		},
+		{
+			dsn:  "user:pass@tcp(127.0.0.1:3306)/?param1=val1",
+			want: "user:pass@tcp(127.0.0.1:3306)/?tls=custom&param1=val1",
+		},
+		// sessionSettingsParam params are being added if exporterLogSlowFilter is set
+		// This test is not a real case. Upstream is manually adding the sessionSettingsParam
+		// using strings.Join while the driver would parse the dns and convert the , to %2C
+		{
+			dsn:  "user:pass@tcp(127.0.0.1:3306)/?" + sessionSettingsParam,
+			want: "user:pass@tcp(127.0.0.1:3306)/?tls=custom&" + strings.ReplaceAll(sessionSettingsParam, ",", "%2C"),
+		},
+	}
+
+	for _, tc := range testCases {
+		dsn, err := setTLSConfig(tc.dsn)
+
+		convey.Convey("Add TLS=custom", t, func() {
+			convey.So(err, convey.ShouldBeNil)
+			convey.So(dsn, convey.ShouldEqual, tc.want)
+		})
+	}
 }
 
 func testVersion(t *testing.T, data bin) {
