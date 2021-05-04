@@ -77,6 +77,10 @@ exporter.global-conn-pool                  | Use global connection pool instead 
 exporter.max-open-conns                    | Maximum number of open connections to the database. https://golang.org/pkg/database/sql/#DB.SetMaxOpenConns
 exporter.max-idle-conns                    | Maximum number of connections in the idle connection pool. https://golang.org/pkg/database/sql/#DB.SetMaxIdleConns
 exporter.conn-max-lifetime                 | Maximum amount of time a connection may be reused. https://golang.org/pkg/database/sql/#DB.SetConnMaxLifetime
+mysql.ssl-ca-file                          | Path to the SSL CA file.
+mysql.ssl-cert-file                        | Path to the SSL certificate file.
+mysql.ssl-key-file                         | Path to the SSL certificate key file.
+mysql.ssl-skip-verify                      | Skip SSL certifcates validation.
 web.listen-address                         | Address to listen on for web interface and telemetry.
 web.telemetry-path                         | Path under which to expose metrics.
 version                                    | Print the version information.
