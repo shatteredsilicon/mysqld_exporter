@@ -26,7 +26,7 @@ env:
 services:
 - docker
 
-go_import_path: github.com/percona/mysqld_exporter
+go_import_path: github.com/shatteredsilicon/mysqld_exporter
 
 before_script:
 - sudo service mysql stop

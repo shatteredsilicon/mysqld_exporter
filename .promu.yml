@@ -1,5 +1,5 @@
 repository:
-    path: github.com/percona/mysqld_exporter
+    path: github.com/shatteredsilicon/mysqld_exporter
 build:
     flags: -a -tags netgo
     ldflags: |

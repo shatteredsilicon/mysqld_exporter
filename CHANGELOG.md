@@ -1,3 +1,7 @@
+## v0.10.1 / 2022-03-28
+
+* [BUGFIX] Fix innodb_metrics for mariadb 10.5+
+
 ## v0.10.0 / 2017-04-25
 
 BREAKING CHANGES:
