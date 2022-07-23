@@ -22,7 +22,7 @@ import (
 
 var (
 	userQueriesPath = flag.String(
-		"queries-file-name", "/usr/local/percona/pmm-client/queries-mysqld.yml", // Default path.
+		"queries-file-name", "/opt/ss/ssm-client/queries-mysqld.yml", // Default path.
 		"Path to custom queries file.",
 	)
 )

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -23,6 +24,8 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/shatteredsilicon/mysqld_exporter/collector"
+	"github.com/shatteredsilicon/ssm-client/pmm"
+	"github.com/shatteredsilicon/ssm-client/pmm/plugin"
 )
 
 // System variable params formatting.
@@ -436,12 +439,53 @@ func main() {
 	}
 
 	log.Infoln("Listening on", *listenAddress)
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		if ssl {
+			w.Header().Add("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		}
+
+		if req.Method != http.MethodDelete {
+			w.Write(landingPage)
+			return
+		}
+
+		errFunc := func(w http.ResponseWriter, err error) {
+			log.Errorf("remove metrics failed: %s", err.Error())
+
+			errBytes, _ := json.Marshal(map[string]interface{}{
+				"error": fmt.Sprintf("Remove metrics %s failed: %s", plugin.NameLinux, err.Error()),
+			})
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(errBytes)
+			return
+		}
+
+		admin := &pmm.Admin{}
+		err := admin.LoadConfig()
+		if err != nil {
+			errFunc(w, err)
+			return
+		}
+
+		err = admin.SetAPI()
+		if err != nil {
+			errFunc(w, err)
+			return
+		}
+
+		err = admin.RemoveMetrics(plugin.NameMySQL)
+		if err != nil {
+			errFunc(w, err)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	if ssl {
 		// https
-		mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-			w.Header().Add("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
-			w.Write(landingPage)
-		})
 		tlsCfg := &tls.Config{
 			MinVersion:               tls.VersionTLS12,
 			CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
@@ -459,10 +503,6 @@ func main() {
 		log.Fatal(srv.ListenAndServeTLS(*sslCertFile, *sslKeyFile))
 	} else {
 		// http
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			w.Write(landingPage)
-		})
-
 		log.Fatal(srv.ListenAndServe())
 	}
 }
