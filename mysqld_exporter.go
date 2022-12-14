@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +37,10 @@ var (
 	showVersion = flag.Bool(
 		"version", false,
 		"Print version information.",
+	)
+	configPath = flag.String(
+		"config", "/opt/ss/ssm-client/mysqld_exporter.conf",
+		"Path of config file",
 	)
 	listenAddress = flag.String(
 		"web.listen-address", ":9104",
@@ -214,7 +219,7 @@ func init() {
 	prometheus.MustRegister(version.NewCollector("mysqld_exporter"))
 }
 
-func newHandler(cfg *webAuth, db *sql.DB, metrics collector.Metrics, scrapers []collector.Scraper, defaultGatherer bool) http.HandlerFunc {
+func newHandler(auth *webAuth, db *sql.DB, metrics collector.Metrics, scrapers []collector.Scraper, defaultGatherer bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		filteredScrapers := scrapers
 		params := r.URL.Query()["collect[]"]
@@ -226,16 +231,16 @@ func newHandler(cfg *webAuth, db *sql.DB, metrics collector.Metrics, scrapers []
 			if err != nil {
 				log.Errorf("Failed to parse timeout from Prometheus header: %s", err)
 			} else {
-				if *timeoutOffset >= timeoutSeconds {
+				if lookupConfig("timeout-offset", *timeoutOffset).(float64) >= timeoutSeconds {
 					// Ignore timeout offset if it doesn't leave time to scrape.
 					log.Errorf(
 						"Timeout offset (--timeout-offset=%.2f) should be lower than prometheus scrape time (X-Prometheus-Scrape-Timeout-Seconds=%.2f).",
-						*timeoutOffset,
+						lookupConfig("timeout-offset", *timeoutOffset).(float64),
 						timeoutSeconds,
 					)
 				} else {
 					// Subtract timeout offset from timeout.
-					timeoutSeconds -= *timeoutOffset
+					timeoutSeconds -= lookupConfig("timeout-offset", *timeoutOffset).(float64)
 				}
 				// Create new timeout context with request context as parent.
 				var cancel context.CancelFunc
@@ -288,12 +293,14 @@ func newHandler(cfg *webAuth, db *sql.DB, metrics collector.Metrics, scrapers []
 			ErrorHandling: promhttp.ContinueOnError,
 			ErrorLog:      log.NewErrorLogger(),
 		})
-		if cfg.User != "" && cfg.Password != "" {
-			h = &basicAuthHandler{handler: h.ServeHTTP, user: cfg.User, password: cfg.Password}
+		if auth.User != "" && auth.Password != "" {
+			h = &basicAuthHandler{handler: h.ServeHTTP, user: auth.User, password: auth.Password}
 		}
 		h.ServeHTTP(w, r)
 	}
 }
+
+var cfg = new(config)
 
 func main() {
 	// Generate ON/OFF flags for all scrapers.
@@ -315,15 +322,25 @@ func main() {
 		os.Exit(0)
 	}
 
+	err := ini.MapTo(cfg, *configPath)
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Load config file %s failed: %s", *configPath, err.Error()))
+	}
+
+	for scraper, enabled := range scraperFlags {
+		v := lookupConfig(fmt.Sprintf("collect.%s", scraper.Name()), *enabled).(bool)
+		scraperFlags[scraper] = &v
+	}
+
 	// landingPage contains the HTML served at '/'.
 	// TODO: Make this nicer and more informative.
 	var landingPage = []byte(`<html>
 <head><title>MySQLd 3-in-1 exporter</title></head>
 <body>
 <h1>MySQL 3-in-1 exporter</h1>
-<li><a href="` + *metricPath + `-hr">high-res metrics</a></li>
-<li><a href="` + *metricPath + `-mr">medium-res metrics</a></li>
-<li><a href="` + *metricPath + `-lr">low-res metrics</a></li>
+<li><a href="` + lookupConfig("web.telemetry-path", *metricPath).(string) + `-hr">high-res metrics</a></li>
+<li><a href="` + lookupConfig("web.telemetry-path", *metricPath).(string) + `-mr">medium-res metrics</a></li>
+<li><a href="` + lookupConfig("web.telemetry-path", *metricPath).(string) + `-lr">low-res metrics</a></li>
 </body>
 </html>
 `)
@@ -332,17 +349,16 @@ func main() {
 	log.Infoln("Build context", version.BuildContext())
 
 	// Get DSN.
-	dsn = os.Getenv("DATA_SOURCE_NAME")
+	dsn = cfg.Exporter.DSN
 	if len(dsn) == 0 {
-		var err error
-		if dsn, err = parseMycnf(*configMycnf); err != nil {
+		if dsn, err = parseMycnf(lookupConfig("config.my-cnf", *configMycnf).(string)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	// Setup extra params for the DSN, default to having a lock timeout.
-	dsnParams := []string{fmt.Sprintf(timeoutParam, *exporterLockTimeout)}
-	if *exporterLogSlowFilter {
+	dsnParams := []string{fmt.Sprintf(timeoutParam, lookupConfig("exporter.lock_wait_timeout", *exporterLockTimeout).(int))}
+	if lookupConfig("exporter.log_slow_filter", *exporterLogSlowFilter).(bool) {
 		dsnParams = append(dsnParams, sessionSettingsParam)
 	}
 
@@ -355,8 +371,7 @@ func main() {
 
 	// Open global connection pool if requested.
 	var db *sql.DB
-	var err error
-	if *exporterGlobalConnPool {
+	if lookupConfig("exporter.global-conn-pool", *exporterGlobalConnPool).(bool) {
 		db, err = newDB(dsn)
 		if err != nil {
 			log.Fatalln("Error opening connection to database:", err)
@@ -364,10 +379,11 @@ func main() {
 		defer db.Close()
 	}
 
-	cfg := &webAuth{}
+	authCfg := &webAuth{}
 	httpAuth := os.Getenv("HTTP_AUTH")
-	if *webAuthFile != "" {
-		bytes, err := ioutil.ReadFile(*webAuthFile)
+	authFile := lookupConfig("web.auth-file", *webAuthFile).(string)
+	if authFile != "" {
+		bytes, err := ioutil.ReadFile(authFile)
 		if err != nil {
 			log.Fatal("Cannot read auth file: ", err)
 		}
@@ -379,23 +395,25 @@ func main() {
 		if len(data) != 2 || data[0] == "" || data[1] == "" {
 			log.Fatal("HTTP_AUTH should be formatted as user:password")
 		}
-		cfg.User = data[0]
-		cfg.Password = data[1]
+		authCfg.User = data[0]
+		authCfg.Password = data[1]
 	}
-	if cfg.User != "" && cfg.Password != "" {
+	if authCfg.User != "" && authCfg.Password != "" {
 		log.Infoln("HTTP basic authentication is enabled")
 	}
 
-	if *sslCertFile != "" && *sslKeyFile == "" || *sslCertFile == "" && *sslKeyFile != "" {
+	certFile := lookupConfig("web.ssl-cert-file", *sslCertFile).(string)
+	keyFile := lookupConfig("web.ssl-key-file", *sslKeyFile).(string)
+	if certFile != "" && keyFile == "" || certFile == "" && keyFile != "" {
 		log.Fatal("One of the flags -web.ssl-cert or -web.ssl-key is missed to enable HTTPS/TLS")
 	}
 	ssl := false
-	if *sslCertFile != "" && *sslKeyFile != "" {
-		if _, err := os.Stat(*sslCertFile); os.IsNotExist(err) {
-			log.Fatal("SSL certificate file does not exist: ", *sslCertFile)
+	if certFile != "" && keyFile != "" {
+		if _, err := os.Stat(certFile); os.IsNotExist(err) {
+			log.Fatal("SSL certificate file does not exist: ", certFile)
 		}
-		if _, err := os.Stat(*sslKeyFile); os.IsNotExist(err) {
-			log.Fatal("SSL key file does not exist: ", *sslKeyFile)
+		if _, err := os.Stat(keyFile); os.IsNotExist(err) {
+			log.Fatal("SSL key file does not exist: ", keyFile)
 		}
 		ssl = true
 		log.Infoln("HTTPS/TLS is enabled")
@@ -406,9 +424,9 @@ func main() {
 
 	// Defines what to scrape in each resolution.
 	hr, mr, lr := enabledScrapers(scraperFlags)
-	mux.Handle(*metricPath+"-hr", newHandler(cfg, db, collector.NewMetrics("hr"), hr, true))
-	mux.Handle(*metricPath+"-mr", newHandler(cfg, db, collector.NewMetrics("mr"), mr, false))
-	mux.Handle(*metricPath+"-lr", newHandler(cfg, db, collector.NewMetrics("lr"), lr, false))
+	mux.Handle(lookupConfig("web.telemetry-path", *metricPath).(string)+"-hr", newHandler(authCfg, db, collector.NewMetrics("hr"), hr, true))
+	mux.Handle(lookupConfig("web.telemetry-path", *metricPath).(string)+"-mr", newHandler(authCfg, db, collector.NewMetrics("mr"), mr, false))
+	mux.Handle(lookupConfig("web.telemetry-path", *metricPath).(string)+"-lr", newHandler(authCfg, db, collector.NewMetrics("lr"), lr, false))
 
 	// Log which scrapers are enabled.
 	if len(hr) > 0 {
@@ -431,11 +449,11 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:    *listenAddress,
+		Addr:    lookupConfig("web.listen-address", *listenAddress).(string),
 		Handler: mux,
 	}
 
-	log.Infoln("Listening on", *listenAddress)
+	log.Infoln("Listening on", lookupConfig("web.listen-address", *listenAddress).(string))
 	if ssl {
 		// https
 		mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
@@ -456,7 +474,7 @@ func main() {
 		srv.TLSConfig = tlsCfg
 		srv.TLSNextProto = make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0)
 
-		log.Fatal(srv.ListenAndServeTLS(*sslCertFile, *sslKeyFile))
+		log.Fatal(srv.ListenAndServeTLS(certFile, keyFile))
 	} else {
 		// http
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -491,9 +509,144 @@ func newDB(dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(*exporterMaxOpenConns)
-	db.SetMaxIdleConns(*exporterMaxIdleConns)
-	db.SetConnMaxLifetime(*exporterConnMaxLifetime)
+	db.SetMaxOpenConns(lookupConfig("exporter.max-open-conns", *exporterMaxOpenConns).(int))
+	db.SetMaxIdleConns(lookupConfig("exporter.max-idle-conns", *exporterMaxIdleConns).(int))
+	maxLifetime, _ := time.ParseDuration(lookupConfig("exporter.conn-max-lifetime", *exporterConnMaxLifetime).(string))
+	db.SetConnMaxLifetime(maxLifetime)
 
 	return db, nil
+}
+
+type config struct {
+	TimeoutOffset float64        `ini:"timeout-offset"`
+	Config        configConfig   `ini:"config"`
+	Collect       collectConfig  `ini:"collect"`
+	Web           webConfig      `ini:"web"`
+	Exporter      exporterConfig `ini:"exporter"`
+}
+
+type collectConfig struct {
+	All                  bool `ini:"all"`
+	GlobalStatus         bool `ini:"global_status"`
+	GlobalVariables      bool `ini:"global_variables"`
+	SlaveStatus          bool `ini:"slave_status"`
+	ProcessList          bool `ini:"info_schema.processlist"`
+	TableSchema          bool `ini:"info_schema.tables"`
+	InnodbTableSpaces    bool `ini:"info_schema.innodb_tablespaces"`
+	InnodbMetrics        bool `ini:"info_schema.innodb_metrics"`
+	AutoIncrementColumns bool `ini:"auto_increment.columns"`
+	BinlogSize           bool `ini:"binlog_size"`
+	PerfTableIOWaits     bool `ini:"perf_schema.tableiowaits"`
+	PerfIndexIOWaits     bool `ini:"perf_schema.indexiowaits"`
+	PerfTableLockWaits   bool `ini:"perf_schema.tablelocks"`
+	PerfEventsStatements bool `ini:"perf_schema.eventsstatements"`
+	PerfEventsWaits      bool `ini:"perf_schema.eventswaits"`
+	PerfFileEvents       bool `ini:"perf_schema.file_events"`
+	PerfFileInstances    bool `ini:"perf_schema.file_instances"`
+	UserStat             bool `ini:"info_schema.userstats"`
+	ClientStat           bool `ini:"info_schema.clientstats"`
+	TableStat            bool `ini:"info_schema.tablestats"`
+	QueryResponseTime    bool `ini:"info_schema.query_response_time"`
+	EngineTokudbStatus   bool `ini:"engine_tokudb_status"`
+	EngineInnodbStatus   bool `ini:"engine_innodb_status"`
+	Heartbeat            bool `ini:"heartbeat"`
+	InnodbCmp            bool `ini:"info_schema.innodb_cmp"`
+	InnodbCmpMem         bool `ini:"info_schema.innodb_cmpmem"`
+	CustomQuery          bool `ini:"custom_query"`
+}
+
+type webConfig struct {
+	ListenAddress string `ini:"listen-address"`
+	TelemetryPath string `ini:"telemetry-path"`
+	AuthFile      string `ini:"auth-file"`
+	SSLCertFile   string `ini:"ssl-cert-file"`
+	SSLKeyFile    string `ini:"ssl-key-file"`
+}
+
+type exporterConfig struct {
+	LockWaitTimeout int    `ini:"lock_wait_timeout"`
+	LogSlowFilter   bool   `ini:"log_slow_filter"`
+	GlobalConnPool  bool   `ini:"global-conn-pool"`
+	MaxOpenConns    int    `ini:"max-open-conns"`
+	MaxIdleConns    int    `ini:"max-idle-conns"`
+	ConnMaxLifetime string `ini:"conn-max-lifetime"`
+	DSN             string `ini:"dsn"`
+}
+
+type configConfig struct {
+	MyCnf string `ini:"my-cnf"`
+}
+
+// lookupConfig lookup config from flag
+// or config by name, returns nil if none exists.
+// name should be in this format -> '[section].[key]'
+func lookupConfig(name string, defaultValue interface{}) interface{} {
+	var flagSet bool
+	var flagValue interface{}
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			flagSet = true
+			switch reflect.Indirect(reflect.ValueOf(f.Value)).Kind() {
+			case reflect.Bool:
+				flagValue = reflect.Indirect(reflect.ValueOf(f.Value)).Bool()
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				flagValue = reflect.Indirect(reflect.ValueOf(f.Value)).Int()
+			case reflect.Float32, reflect.Float64:
+				flagValue = reflect.Indirect(reflect.ValueOf(f.Value)).Float()
+			case reflect.String:
+				flagValue = reflect.Indirect(reflect.ValueOf(f.Value)).String()
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				flagValue = reflect.Indirect(reflect.ValueOf(f.Value)).Uint()
+			}
+		}
+	})
+	if flagSet {
+		return flagValue
+	}
+
+	section := ""
+	key := name
+	if i := strings.Index(name, "."); i > 0 {
+		section = name[0:i]
+		if len(name) > i+1 {
+			key = name[i+1:]
+		} else {
+			key = ""
+		}
+	}
+
+	t := reflect.TypeOf(*cfg)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		iniName := field.Tag.Get("ini")
+		matched := iniName == section
+		if section == "" {
+			matched = iniName == key
+		}
+		if !matched {
+			continue
+		}
+
+		v := reflect.ValueOf(cfg).Elem().Field(i)
+		if section == "" {
+			return v.Interface()
+		}
+
+		if !v.CanAddr() {
+			continue
+		}
+
+		st := reflect.TypeOf(v.Interface())
+		for j := 0; j < st.NumField(); j++ {
+			sectionField := st.Field(j)
+			sectionININame := sectionField.Tag.Get("ini")
+			if sectionININame != key {
+				continue
+			}
+
+			return v.Addr().Elem().Field(j).Interface()
+		}
+	}
+
+	return defaultValue
 }
