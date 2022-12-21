@@ -8,3 +8,5 @@
 *-stamp
 .idea
 *.iml
+
+vendor/
