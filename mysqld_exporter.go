@@ -326,6 +326,9 @@ func main() {
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Load config file %s failed: %s", *configPath, err.Error()))
 	}
+	if os.Getenv("DATA_SOURCE_NAME") != "" {
+		cfg.Exporter.DSN = os.Getenv("DATA_SOURCE_NAME")
+	}
 
 	for scraper, enabled := range scraperFlags {
 		v := lookupConfig(fmt.Sprintf("collect.%s", scraper.Name()), *enabled).(bool)
