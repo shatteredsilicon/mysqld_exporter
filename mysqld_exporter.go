@@ -59,7 +59,7 @@ var (
 		"Path to .my.cnf file to read MySQL credentials from.",
 	)
 	webAuthFile = flag.String(
-		"web.auth-file", "",
+		"web.auth-file", "/opt/ss/ssm-client/ssm.yml",
 		"Path to YAML file with server_user, server_password options for http basic auth (overrides HTTP_AUTH env var).",
 	)
 	sslCertFile = flag.String(
@@ -398,7 +398,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Cannot read auth file: ", err)
 		}
-		if err := yaml.Unmarshal(bytes, cfg); err != nil {
+		if err := yaml.Unmarshal(bytes, authCfg); err != nil {
 			log.Fatal("Cannot parse auth file: ", err)
 		}
 	} else if httpAuth != "" {
