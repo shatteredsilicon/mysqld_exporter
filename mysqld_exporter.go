@@ -567,11 +567,11 @@ type collectConfig struct {
 }
 
 type webConfig struct {
-	ListenAddress string `ini:"listen-address"`
-	TelemetryPath string `ini:"telemetry-path"`
-	AuthFile      string `ini:"auth-file"`
-	SSLCertFile   string `ini:"ssl-cert-file"`
-	SSLKeyFile    string `ini:"ssl-key-file"`
+	ListenAddress string  `ini:"listen-address"`
+	TelemetryPath string  `ini:"telemetry-path"`
+	AuthFile      *string `ini:"auth-file"`
+	SSLCertFile   string  `ini:"ssl-cert-file"`
+	SSLKeyFile    string  `ini:"ssl-key-file"`
 }
 
 type exporterConfig struct {
@@ -637,7 +637,15 @@ func lookupConfig(name string, defaultValue interface{}) interface{} {
 				continue
 			}
 
-			return v.Addr().Elem().Field(j).Interface()
+			if reflect.ValueOf(v.Addr().Elem().Field(j).Interface()).Kind() != reflect.Ptr {
+				return v.Addr().Elem().Field(j).Interface()
+			}
+
+			if v.Addr().Elem().Field(j).IsNil() {
+				return defaultValue
+			}
+
+			return v.Addr().Elem().Field(j).Elem().Interface()
 		}
 	}
 

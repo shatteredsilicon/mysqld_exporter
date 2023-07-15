@@ -164,12 +164,12 @@
   version = "v1.3.0"
 
 [[projects]]
-  digest = "1:30b09d75e7e16119e85020374df10ea06f263c9bdff72afdc1522838b9609375"
+  digest = "1:0c3ec21dd54edcb2e19c6bdbe82e9b65ee214565d1ae2db946f028efb00b8419"
   name = "gopkg.in/ini.v1"
   packages = ["."]
   pruneopts = "NUT"
-  revision = "06f5f3d67269ccec1fe5fe4134ba6e982984f7f5"
-  version = "v1.37.0"
+  revision = "b2f570e5b5b844226bbefe6fb521d891f529a951"
+  version = "v1.67.0"
 
 [[projects]]
   digest = "1:7c95b35057a0ff2e19f707173cc1a947fa43a6eb5c4d300d196ece0334046082"
