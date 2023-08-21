@@ -84,10 +84,10 @@ func TestScrapeGlobalStatus(t *testing.T) {
 		{labels: labelMap{"aggregator": "Standard Deviation"}, value: 0.0112616, metricType: dto.MetricType_GAUGE},
 		{labels: labelMap{"aggregator": "Sample Size"}, value: 6, metricType: dto.MetricType_GAUGE},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range counterExpected {
 			got := readMetric(<-ch)
-			convey.So(got, convey.ShouldResemble, expect)
+			c.So(got, convey.ShouldResemble, expect)
 		}
 	})
 

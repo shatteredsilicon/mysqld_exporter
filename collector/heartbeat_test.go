@@ -44,10 +44,10 @@ func TestScrapeHeartbeat(t *testing.T) {
 		{labels: labelMap{"server_id": "1"}, value: 1487598113.448042, metricType: dto.MetricType_GAUGE},
 		{labels: labelMap{"server_id": "1"}, value: 1487597613.00132, metricType: dto.MetricType_GAUGE},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range counterExpected {
 			got := readMetric(<-ch)
-			convey.So(got, convey.ShouldResemble, expect)
+			c.So(got, convey.ShouldResemble, expect)
 		}
 	})
 

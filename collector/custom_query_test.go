@@ -66,10 +66,10 @@ func TestScrapeCustomQueriesCounter(t *testing.T) {
 			{labels: labelMap{"fruit": "pear"}, value: 42, metricType: dto.MetricType_COUNTER},
 			{labels: labelMap{"fruit": "plumb"}, value: 80, metricType: dto.MetricType_COUNTER},
 		}
-		convey.Convey("Metrics should be resemble", func() {
+		convey.Convey("Metrics should be resemble", t, func(c convey.C) {
 			for _, expect := range counterExpected {
 				got := readMetric(<-ch)
-				convey.So(got, convey.ShouldResemble, expect)
+				c.So(got, convey.ShouldResemble, expect)
 			}
 		})
 
@@ -132,10 +132,10 @@ func TestScrapeCustomQueriesDuration(t *testing.T) {
 			{labels: labelMap{"fruit": "pear"}, value: 2792000000, metricType: dto.MetricType_GAUGE},
 			{labels: labelMap{"fruit": "plumb"}, value: 2892000000, metricType: dto.MetricType_GAUGE},
 		}
-		convey.Convey("Metrics should be resemble", func() {
+		convey.Convey("Metrics should be resemble", t, func(c convey.C) {
 			for _, expect := range counterExpected {
 				got := readMetric(<-ch)
-				convey.So(got, convey.ShouldResemble, expect)
+				c.So(got, convey.ShouldResemble, expect)
 			}
 		})
 
@@ -182,9 +182,9 @@ func TestScrapeCustomQueriesDbError(t *testing.T) {
 		ch := make(chan prometheus.Metric)
 
 		expectedErr := "experiment_garden:error running query on database: experiment_garden, ERROR 1049 (42000): Unknown database 'non_existed_experiment'"
-		convey.Convey("Should raise error ", func() {
+		convey.Convey("Should raise error ", t, func(c convey.C) {
 			err = (ScrapeCustomQuery{}).Scrape(context.Background(), db, ch)
-			convey.So(err, convey.ShouldBeError, expectedErr)
+			c.So(err, convey.ShouldBeError, expectedErr)
 		})
 		close(ch)
 	})
@@ -213,9 +213,9 @@ func TestScrapeCustomQueriesIncorrectYaml(t *testing.T) {
 
 		ch := make(chan prometheus.Metric)
 
-		convey.Convey("Should raise error ", func() {
+		convey.Convey("Should raise error ", t, func(c convey.C) {
 			err = (ScrapeCustomQuery{}).Scrape(context.Background(), db, ch)
-			convey.So(err, convey.ShouldBeError, "failed to add custom queries:incorrect yaml format for bar")
+			c.So(err, convey.ShouldBeError, "failed to add custom queries:incorrect yaml format for bar")
 		})
 		close(ch)
 
@@ -223,7 +223,7 @@ func TestScrapeCustomQueriesIncorrectYaml(t *testing.T) {
 }
 
 func TestScrapeCustomQueriesNoFile(t *testing.T) {
-	convey.Convey("Passed as a custom queries unexisted file or path", t, func() {
+	convey.Convey("Passed as a custom queries unexisted file or path", t, func(c convey.C) {
 		err := flag.Set("queries-file-name", "/wrong/path/custom_query_test.yaml")
 		if err != nil {
 			t.Fatalf("cannot set flag: %s", err)
@@ -236,7 +236,7 @@ func TestScrapeCustomQueriesNoFile(t *testing.T) {
 		ch := make(chan prometheus.Metric)
 		err = (ScrapeCustomQuery{}).Scrape(context.Background(), db, ch)
 		close(ch)
-		convey.So(err, convey.ShouldBeError, "failed to open custom queries:open /wrong/path/custom_query_test.yaml: no such file or directory")
+		c.So(err, convey.ShouldBeError, "failed to open custom queries:open /wrong/path/custom_query_test.yaml: no such file or directory")
 	})
 }
 

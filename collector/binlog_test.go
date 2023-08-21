@@ -39,10 +39,10 @@ func TestScrapeBinlogSize(t *testing.T) {
 		{labels: labelMap{}, value: 3, metricType: dto.MetricType_GAUGE},
 		{labels: labelMap{}, value: 444, metricType: dto.MetricType_GAUGE},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range counterExpected {
 			got := readMetric(<-ch)
-			convey.So(got, convey.ShouldResemble, expect)
+			c.So(got, convey.ShouldResemble, expect)
 		}
 	})
 

@@ -75,42 +75,42 @@ func TestParseMycnf(t *testing.T) {
 			world
 		`
 	)
-	convey.Convey("Various .my.cnf configurations", t, func() {
-		convey.Convey("Local tcp connection", func() {
+	convey.Convey("Various .my.cnf configurations", t, func(c convey.C) {
+		c.Convey("Local tcp connection", func() {
 			dsn, _ := parseMycnf([]byte(tcpConfig))
-			convey.So(dsn, convey.ShouldEqual, "root:abc123@tcp(localhost:3306)/")
+			c.So(dsn, convey.ShouldEqual, "root:abc123@tcp(localhost:3306)/")
 		})
-		convey.Convey("Local tcp connection on non-default port", func() {
+		c.Convey("Local tcp connection on non-default port", func() {
 			dsn, _ := parseMycnf([]byte(tcpConfig2))
-			convey.So(dsn, convey.ShouldEqual, "root:abc123@tcp(localhost:3308)/")
+			c.So(dsn, convey.ShouldEqual, "root:abc123@tcp(localhost:3308)/")
 		})
-		convey.Convey("Socket connection", func() {
+		c.Convey("Socket connection", func() {
 			dsn, _ := parseMycnf([]byte(socketConfig))
-			convey.So(dsn, convey.ShouldEqual, "user:pass@unix(/var/lib/mysql/mysql.sock)/")
+			c.So(dsn, convey.ShouldEqual, "user:pass@unix(/var/lib/mysql/mysql.sock)/")
 		})
-		convey.Convey("Socket connection ignoring defined host", func() {
+		c.Convey("Socket connection ignoring defined host", func() {
 			dsn, _ := parseMycnf([]byte(socketConfig2))
-			convey.So(dsn, convey.ShouldEqual, "dude:nopassword@unix(/var/lib/mysql/mysql.sock)/")
+			c.So(dsn, convey.ShouldEqual, "dude:nopassword@unix(/var/lib/mysql/mysql.sock)/")
 		})
-		convey.Convey("Remote connection", func() {
+		c.Convey("Remote connection", func() {
 			dsn, _ := parseMycnf([]byte(remoteConfig))
-			convey.So(dsn, convey.ShouldEqual, "dude:nopassword@tcp(1.2.3.4:3307)/")
+			c.So(dsn, convey.ShouldEqual, "dude:nopassword@tcp(1.2.3.4:3307)/")
 		})
-		convey.Convey("Missed user", func() {
+		c.Convey("Missed user", func() {
 			_, err := parseMycnf([]byte(badConfig))
-			convey.So(err, convey.ShouldNotBeNil)
+			c.So(err, convey.ShouldNotBeNil)
 		})
-		convey.Convey("Missed password", func() {
+		c.Convey("Missed password", func() {
 			_, err := parseMycnf([]byte(badConfig2))
-			convey.So(err, convey.ShouldNotBeNil)
+			c.So(err, convey.ShouldNotBeNil)
 		})
-		convey.Convey("No [client] section", func() {
+		c.Convey("No [client] section", func() {
 			_, err := parseMycnf([]byte(badConfig3))
-			convey.So(err, convey.ShouldNotBeNil)
+			c.So(err, convey.ShouldNotBeNil)
 		})
-		convey.Convey("Invalid config", func() {
+		c.Convey("Invalid config", func() {
 			_, err := parseMycnf([]byte(badConfig4))
-			convey.So(err, convey.ShouldNotBeNil)
+			c.So(err, convey.ShouldNotBeNil)
 		})
 	})
 }

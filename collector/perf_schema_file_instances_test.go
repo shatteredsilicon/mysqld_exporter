@@ -54,10 +54,10 @@ func TestScrapePerfFileInstances(t *testing.T) {
 		{labels: labelMap{"file_name": "db3/file", "event_name": "event3", "mode": "read"}, value: 1337, metricType: dto.MetricType_COUNTER},
 		{labels: labelMap{"file_name": "db3/file", "event_name": "event3", "mode": "write"}, value: 326, metricType: dto.MetricType_COUNTER},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range metricExpected {
 			got := readMetric(<-ch)
-			convey.So(got, convey.ShouldResemble, expect)
+			c.So(got, convey.ShouldResemble, expect)
 		}
 	})
 

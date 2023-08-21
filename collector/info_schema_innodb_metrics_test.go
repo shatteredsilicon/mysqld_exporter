@@ -61,10 +61,10 @@ func TestScrapeInnodbMetrics(t *testing.T) {
 		{labels: labelMap{}, value: 5, metricType: dto.MetricType_GAUGE},
 		{labels: labelMap{"state": "data"}, value: 6, metricType: dto.MetricType_GAUGE},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range metricExpected {
 			got := readMetric(<-ch)
-			convey.So(got, convey.ShouldResemble, expect)
+			c.So(got, convey.ShouldResemble, expect)
 		}
 	})
 
