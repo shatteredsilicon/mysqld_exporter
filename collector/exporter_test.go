@@ -44,7 +44,7 @@ func TestExporter(t *testing.T) {
 		}
 	})
 
-	convey.Convey("Metrics collection", t, func() {
+	convey.Convey("Metrics collection", t, func(c convey.C) {
 		ch := make(chan prometheus.Metric)
 		go func() {
 			exporter.Collect(ch)
@@ -54,7 +54,7 @@ func TestExporter(t *testing.T) {
 		for m := range ch {
 			got := readMetric(m)
 			if got.labels[model.MetricNameLabel] == "mysql_up" {
-				convey.So(got.value, convey.ShouldEqual, 1)
+				c.So(got.value, convey.ShouldEqual, 1)
 			}
 		}
 	})
@@ -68,19 +68,19 @@ func TestGetMySQLVersion(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	convey.Convey("MySQL version extract", t, func() {
+	convey.Convey("MySQL version extract", t, func(c convey.C) {
 		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow(""))
-		convey.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 999)
+		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 999)
 		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("something"))
-		convey.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 999)
+		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 999)
 		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("10.1.17-MariaDB"))
-		convey.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 10.1)
+		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 10.1)
 		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("5.7.13-6-log"))
-		convey.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 5.7)
+		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 5.7)
 		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("5.6.30-76.3-56-log"))
-		convey.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 5.6)
+		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 5.6)
 		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("5.5.51-38.1"))
-		convey.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 5.5)
+		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 5.5)
 	})
 
 	// Ensure all SQL queries were executed

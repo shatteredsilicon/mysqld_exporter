@@ -48,10 +48,10 @@ func TestScrapePerfIndexIOWaits(t *testing.T) {
 		{labels: labelMap{"schema": "database", "name": "table", "index": "NONE", "operation": "update"}, value: 26, metricType: dto.MetricType_COUNTER},
 		{labels: labelMap{"schema": "database", "name": "table", "index": "NONE", "operation": "delete"}, value: 27, metricType: dto.MetricType_COUNTER},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range metricExpected {
 			got := readMetric(<-ch)
-			convey.So(got, convey.ShouldResemble, expect)
+			c.So(got, convey.ShouldResemble, expect)
 		}
 	})
 

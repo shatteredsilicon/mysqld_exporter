@@ -36,10 +36,10 @@ func TestScrapeInnodbCmpMem(t *testing.T) {
 		{labels: labelMap{"page_size": "1024", "buffer": "0"}, value: 50, metricType: dto.MetricType_COUNTER},
 		{labels: labelMap{"page_size": "1024", "buffer": "0"}, value: 0.06, metricType: dto.MetricType_COUNTER},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range expected {
 			got := readMetric(<-ch)
-			convey.So(expect, convey.ShouldResemble, got)
+			c.So(expect, convey.ShouldResemble, got)
 		}
 	})
 

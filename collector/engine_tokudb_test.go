@@ -18,10 +18,10 @@ func TestSanitizeTokudbMetric(t *testing.T) {
 		"memory: number of bytes used (requested + overhead)":    "memory_number_of_bytes_used_requested_and_overhead",
 		"ft: uncompressed / compressed bytes written (overall)":  "ft_uncompressed_and_compressed_bytes_written_overall",
 	}
-	convey.Convey("Replacement tests", t, func() {
+	convey.Convey("Replacement tests", t, func(c convey.C) {
 		for metric := range samples {
 			got := sanitizeTokudbMetric(metric)
-			convey.So(got, convey.ShouldEqual, samples[metric])
+			c.So(got, convey.ShouldEqual, samples[metric])
 		}
 	})
 }
@@ -56,10 +56,10 @@ func TestScrapeEngineTokudbStatus(t *testing.T) {
 		{labels: labelMap{}, value: 45316247, metricType: dto.MetricType_UNTYPED},
 		{labels: labelMap{}, value: 9115.904484, metricType: dto.MetricType_UNTYPED},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range metricsExpected {
 			got := readMetric(<-ch)
-			convey.So(got, convey.ShouldResemble, expect)
+			c.So(got, convey.ShouldResemble, expect)
 		}
 	})
 

@@ -45,10 +45,10 @@ func TestScrapeTableStat(t *testing.T) {
 		{labels: labelMap{"schema": "mysql", "table": "user"}, value: 2},
 		{labels: labelMap{"schema": "mysql", "table": "user"}, value: 5},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range expected {
 			got := readMetric(<-ch)
-			convey.So(expect, convey.ShouldResemble, got)
+			c.So(expect, convey.ShouldResemble, got)
 		}
 	})
 

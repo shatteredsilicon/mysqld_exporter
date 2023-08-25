@@ -68,8 +68,8 @@ func TestScrapeQueryResponseTime(t *testing.T) {
 	gotPb := &dto.Metric{}
 	gotHistogram := <-ch // read the last item from channel
 	gotHistogram.Write(gotPb)
-	convey.Convey("Histogram comparison", t, func() {
-		convey.So(expectPb.Histogram, convey.ShouldResemble, gotPb.Histogram)
+	convey.Convey("Histogram comparison", t, func(c convey.C) {
+		c.So(expectPb.Histogram, convey.ShouldResemble, gotPb.Histogram)
 	})
 
 	// Ensure all SQL queries were executed

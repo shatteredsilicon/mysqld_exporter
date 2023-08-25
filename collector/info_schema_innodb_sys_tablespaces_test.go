@@ -39,10 +39,10 @@ func TestScrapeInfoSchemaInnodbTablespaces(t *testing.T) {
 		{labels: labelMap{"tablespace_name": "db/compressed"}, value: 300, metricType: dto.MetricType_GAUGE},
 		{labels: labelMap{"tablespace_name": "db/compressed"}, value: 200, metricType: dto.MetricType_GAUGE},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range expected {
 			got := readMetric(<-ch)
-			convey.So(expect, convey.ShouldResemble, got)
+			c.So(expect, convey.ShouldResemble, got)
 		}
 	})
 

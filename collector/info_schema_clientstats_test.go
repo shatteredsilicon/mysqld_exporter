@@ -57,10 +57,10 @@ func TestScrapeClientStat(t *testing.T) {
 		{labels: labelMap{"client": "localhost"}, value: 0, metricType: dto.MetricType_COUNTER},
 		{labels: labelMap{"client": "localhost"}, value: 0, metricType: dto.MetricType_COUNTER},
 	}
-	convey.Convey("Metrics comparison", t, func() {
+	convey.Convey("Metrics comparison", t, func(c convey.C) {
 		for _, expect := range expected {
 			got := readMetric(<-ch)
-			convey.So(expect, convey.ShouldResemble, got)
+			c.So(expect, convey.ShouldResemble, got)
 		}
 	})
 

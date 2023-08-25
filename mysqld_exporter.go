@@ -144,6 +144,7 @@ var scrapers = map[collector.Scraper]bool{
 	collector.ScrapeUserStat{}:                    false,
 	collector.ScrapeClientStat{}:                  false,
 	collector.ScrapeTableStat{}:                   false,
+	collector.ScrapeIndexStat{}:                   false,
 	collector.ScrapeQueryResponseTime{}:           false,
 	collector.ScrapeEngineTokudbStatus{}:          false,
 	collector.ScrapeEngineInnodbStatus{}:          false,
@@ -180,6 +181,7 @@ var scrapersLr = map[collector.Scraper]struct{}{
 	collector.ScrapePerfFileInstances{}:           {},
 	collector.ScrapeUserStat{}:                    {},
 	collector.ScrapeTableStat{}:                   {},
+	collector.ScrapeIndexStat{}:                   {},
 	collector.ScrapePerfEventsStatements{}:        {},
 	collector.ScrapeClientStat{}:                  {},
 	collector.ScrapeInfoSchemaInnodbTablespaces{}: {},
@@ -557,6 +559,7 @@ type collectConfig struct {
 	UserStat             bool `ini:"info_schema.userstats"`
 	ClientStat           bool `ini:"info_schema.clientstats"`
 	TableStat            bool `ini:"info_schema.tablestats"`
+	IndexStat            bool `ini:"info_schema.indexstats"`
 	QueryResponseTime    bool `ini:"info_schema.query_response_time"`
 	EngineTokudbStatus   bool `ini:"engine_tokudb_status"`
 	EngineInnodbStatus   bool `ini:"engine_innodb_status"`
