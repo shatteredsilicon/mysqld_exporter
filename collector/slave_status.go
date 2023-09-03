@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -118,6 +119,32 @@ func (ScrapeSlaveStatus) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 				)
 			}
 		}
+
+		channel := channelName
+		if connectionName != "" {
+			channel = connectionName
+		}
+		channel = strings.ReplaceAll(regexp.QuoteMeta(channel), `\`, `\\`)
+
+		if channel == "" {
+			// 'DEFAULT' as default channel name
+			// '^$' as regex string to match empty string in prometheus query
+			channel = fmt.Sprintf("^$DEFAULT")
+		}
+
+		// This metric is used to help Grafana getting the
+		// channel names (include the empty one)
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName(namespace, slaveStatus, "dummy_channel_name"),
+				"Generic metric from SHOW SLAVE STATUS.",
+				[]string{"master_host", "master_uuid", "channel"},
+				nil,
+			),
+			prometheus.UntypedValue,
+			0,
+			masterHost, masterUUID, channel,
+		)
 	}
 	return nil
 }
