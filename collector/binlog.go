@@ -74,6 +74,11 @@ func (ScrapeBinlogSize) Scrape(ctx context.Context, db *sql.DB, ch chan<- promet
 	}
 	defer masterLogRows.Close()
 
+	masterLogCols, err := masterLogRows.Columns()
+	if err != nil {
+		return err
+	}
+
 	var (
 		size     uint64
 		count    uint64
@@ -83,8 +88,15 @@ func (ScrapeBinlogSize) Scrape(ctx context.Context, db *sql.DB, ch chan<- promet
 	size = 0
 	count = 0
 
+	// SHOW BINARY LOGS output may has extra columns
+	columns := []interface{}{&filename, &filesize}
+	for i := 2; i < len(masterLogCols); i++ {
+		var tmp interface{}
+		columns = append(columns, &tmp)
+	}
+
 	for masterLogRows.Next() {
-		if err := masterLogRows.Scan(&filename, &filesize); err != nil {
+		if err := masterLogRows.Scan(columns...); err != nil {
 			return nil
 		}
 		size += filesize
