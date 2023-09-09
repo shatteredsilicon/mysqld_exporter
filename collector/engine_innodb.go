@@ -57,6 +57,7 @@ func (ScrapeEngineInnodbStatus) Scrape(ctx context.Context, db *sql.DB, ch chan<
 	// 0 read views open inside InnoDB
 	rQueries, _ := regexp.Compile(`(\d+) queries inside InnoDB, (\d+) queries in queue`)
 	rViews, _ := regexp.Compile(`(\d+) read views open inside InnoDB`)
+	ioThreads, _ := regexp.Compile(`^Pending normal aio reads: \[([^\[]+)\] , aio writes: \[([^\[]+)\]`)
 
 	for _, line := range strings.Split(statusCol, "\n") {
 		if data := rQueries.FindStringSubmatch(line); data != nil {
@@ -79,6 +80,40 @@ func (ScrapeEngineInnodbStatus) Scrape(ctx context.Context, db *sql.DB, ch chan<
 				prometheus.GaugeValue,
 				value,
 			)
+		} else if data := ioThreads.FindStringSubmatch(line); data != nil {
+			rThreads := strings.Split(data[1], ",")
+			for i, t := range rThreads {
+				copyI := i
+				pending, _ := strconv.ParseFloat(t, 64)
+				ch <- prometheus.MustNewConstMetric(
+					prometheus.NewDesc(
+						prometheus.BuildFQName(namespace, innodb, "pending_normal_aio_reads"),
+						"InnoDB ending normal aio reads.",
+						[]string{"index"},
+						nil,
+					),
+					prometheus.GaugeValue,
+					float64(pending),
+					strconv.Itoa(copyI),
+				)
+			}
+
+			wThreads := strings.Split(data[2], ",")
+			for i, t := range wThreads {
+				copyI := i
+				pending, _ := strconv.ParseFloat(t, 64)
+				ch <- prometheus.MustNewConstMetric(
+					prometheus.NewDesc(
+						prometheus.BuildFQName(namespace, innodb, "pending_normal_aio_writes"),
+						"InnoDB ending normal aio writes.",
+						[]string{"index"},
+						nil,
+					),
+					prometheus.GaugeValue,
+					float64(pending),
+					strconv.Itoa(copyI),
+				)
+			}
 		}
 	}
 
