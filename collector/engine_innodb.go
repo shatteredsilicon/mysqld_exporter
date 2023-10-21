@@ -5,6 +5,7 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
@@ -57,8 +58,10 @@ func (ScrapeEngineInnodbStatus) Scrape(ctx context.Context, db *sql.DB, ch chan<
 	// 0 read views open inside InnoDB
 	rQueries, _ := regexp.Compile(`(\d+) queries inside InnoDB, (\d+) queries in queue`)
 	rViews, _ := regexp.Compile(`(\d+) read views open inside InnoDB`)
-	ioThreads, _ := regexp.Compile(`^Pending normal aio reads: \[([^\[]+)\] , aio writes: \[([^\[]+)\]`)
+	aioPendingRWs, _ := regexp.Compile(`^Pending normal aio reads:\s?(\d+)?\s(\[\d+(?:, \d+)*\])?\s?, aio writes:\s?(\d+)?\s?(\[\d+(?:, \d+)*\])?`)
+	pendingRWs, _ := regexp.Compile(`^(\d+) pending reads, (\d+) pending writes`)
 
+	pendingReads, pendingWrites := 0, 0
 	for _, line := range strings.Split(statusCol, "\n") {
 		if data := rQueries.FindStringSubmatch(line); data != nil {
 			value, _ := strconv.ParseFloat(data[1], 64)
@@ -80,42 +83,49 @@ func (ScrapeEngineInnodbStatus) Scrape(ctx context.Context, db *sql.DB, ch chan<
 				prometheus.GaugeValue,
 				value,
 			)
-		} else if data := ioThreads.FindStringSubmatch(line); data != nil {
-			rThreads := strings.Split(data[1], ",")
-			for i, t := range rThreads {
-				copyI := i
-				pending, _ := strconv.ParseFloat(t, 64)
-				ch <- prometheus.MustNewConstMetric(
-					prometheus.NewDesc(
-						prometheus.BuildFQName(namespace, innodb, "pending_normal_aio_reads"),
-						"InnoDB ending normal aio reads.",
-						[]string{"index"},
-						nil,
-					),
-					prometheus.GaugeValue,
-					float64(pending),
-					strconv.Itoa(copyI),
-				)
+		} else if data := aioPendingRWs.FindStringSubmatch(line); data != nil {
+			var reads, writes int
+			if data[1] != "" {
+				// format in "Pending normal aio reads: 0 [0, 0, 0, 0] , aio writes: 0 [0, 0, 0, 0]"
+				// or in "Pending normal aio reads: 0 , aio writes: 0"
+				reads, _ = strconv.Atoi(data[1])
+				writes, _ = strconv.Atoi(data[3])
+			} else {
+				// format in "Pending normal aio reads: [0, 0, 0, 0] , aio writes: [0, 0, 0, 0]"
+				var readSlice, writeSlice []int
+				json.Unmarshal([]byte(data[2]), &readSlice)
+				json.Unmarshal([]byte(data[4]), &writeSlice)
+
+				for i := range readSlice {
+					reads += readSlice[i]
+				}
+				for i := range writeSlice {
+					writes += writeSlice[i]
+				}
 			}
 
-			wThreads := strings.Split(data[2], ",")
-			for i, t := range wThreads {
-				copyI := i
-				pending, _ := strconv.ParseFloat(t, 64)
-				ch <- prometheus.MustNewConstMetric(
-					prometheus.NewDesc(
-						prometheus.BuildFQName(namespace, innodb, "pending_normal_aio_writes"),
-						"InnoDB ending normal aio writes.",
-						[]string{"index"},
-						nil,
-					),
-					prometheus.GaugeValue,
-					float64(pending),
-					strconv.Itoa(copyI),
-				)
-			}
+			pendingReads += reads
+			pendingWrites += writes
+		} else if data := pendingRWs.FindStringSubmatch(line); data != nil {
+			reads, _ := strconv.Atoi(data[1])
+			writes, _ := strconv.Atoi(data[2])
+
+			pendingReads += reads
+			pendingWrites += writes
 		}
 	}
+
+	ch <- prometheus.MustNewConstMetric(
+		newDesc(innodb, "pending_reads", "InnoDB pending reads."),
+		prometheus.GaugeValue,
+		float64(pendingReads),
+	)
+
+	ch <- prometheus.MustNewConstMetric(
+		newDesc(innodb, "pending_writes", "InnoDB pending writes."),
+		prometheus.GaugeValue,
+		float64(pendingWrites),
+	)
 
 	return nil
 }
