@@ -60,6 +60,7 @@ func (ScrapeEngineInnodbStatus) Scrape(ctx context.Context, db *sql.DB, ch chan<
 	rViews, _ := regexp.Compile(`(\d+) read views open inside InnoDB`)
 	aioPendingRWs, _ := regexp.Compile(`^Pending normal aio reads:\s?(\d+)?\s(\[\d+(?:, \d+)*\])?\s?, aio writes:\s?(\d+)?\s?(\[\d+(?:, \d+)*\])?`)
 	pendingRWs, _ := regexp.Compile(`^(\d+) pending reads, (\d+) pending writes`)
+	pendingLCWs, _ := regexp.Compile(`^(\d+) pending log (?:flushes|writes), (\d+) pending chkp writes`)
 
 	pendingReads, pendingWrites := 0, 0
 	for _, line := range strings.Split(statusCol, "\n") {
@@ -112,6 +113,21 @@ func (ScrapeEngineInnodbStatus) Scrape(ctx context.Context, db *sql.DB, ch chan<
 
 			pendingReads += reads
 			pendingWrites += writes
+		} else if data := pendingLCWs.FindStringSubmatch(line); data != nil {
+			pendingLogWrites, _ := strconv.Atoi(data[1])
+			pendingChkpWrites, _ := strconv.Atoi(data[2])
+
+			ch <- prometheus.MustNewConstMetric(
+				newDesc(innodb, "pending_log_flushes", "InnoDB pending log flushes."),
+				prometheus.GaugeValue,
+				float64(pendingLogWrites),
+			)
+
+			ch <- prometheus.MustNewConstMetric(
+				newDesc(innodb, "pending_checkpoint_writes", "InnoDB pending checkpoint writes."),
+				prometheus.GaugeValue,
+				float64(pendingChkpWrites),
+			)
 		}
 	}
 
