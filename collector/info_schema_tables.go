@@ -35,6 +35,11 @@ const (
 		  FROM information_schema.schemata
 		  WHERE SCHEMA_NAME NOT IN ('mysql', 'performance_schema', 'information_schema')
 		`
+
+	tableCountQuery = `
+		SELECT COUNT(1)
+		FROM information_schema.tables;
+	`
 )
 
 var (
@@ -56,6 +61,11 @@ var (
 		prometheus.BuildFQName(namespace, informationSchema, "table_size"),
 		"The size of the table components from information_schema.tables",
 		[]string{"schema", "table", "component"}, nil,
+	)
+	infoSchemaTablesCountDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, informationSchema, "table_count"),
+		"The count of the table components from information_schema.tables",
+		nil, nil,
 	)
 )
 
@@ -162,5 +172,12 @@ func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 		}
 	}
 
+	var tableCount int
+	err := db.QueryRowContext(ctx, tableCountQuery).Scan(&tableCount)
+	if err != nil {
+		return err
+	}
+
+	ch <- prometheus.MustNewConstMetric(infoSchemaTablesCountDesc, prometheus.GaugeValue, float64(tableCount))
 	return nil
 }
