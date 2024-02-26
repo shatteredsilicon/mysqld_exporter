@@ -10,16 +10,23 @@ import (
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/log"
 )
 
 const infoSchemaProcesslistQuery = `
-		SELECT COALESCE(command,''),COALESCE(state,''),count(*),sum(time)
+		SELECT COALESCE(command,''),COALESCE(state,''),count(*),sum(time)%s
 		  FROM information_schema.processlist
 		  WHERE ID != connection_id()
 		    AND TIME >= %d
 		  GROUP BY command,state
 		  ORDER BY null
 		`
+
+const infoSchemaProcesslistColumnsQuery = `
+	SELECT column_name
+	FROM information_schema.columns
+	WHERE table_schema = 'information_schema' AND table_name = 'processlist'
+`
 
 var (
 	// Tunable flags.
@@ -36,6 +43,11 @@ var (
 		prometheus.BuildFQName(namespace, informationSchema, "threads_seconds"),
 		"The number of seconds threads (connections) have used split by current state.",
 		[]string{"state"}, nil)
+	processlistMemoryUsedDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, informationSchema, "processlist_memory_used"),
+		"The size of used memory shown in table information_schema.processlist.",
+		[]string{}, nil,
+	)
 )
 
 // whitelist for connection/process states in SHOW PROCESSLIST
@@ -59,10 +71,10 @@ var (
 		"deleting":                  uint32(0),
 		"executing":                 uint32(0),
 		"execution of init_command": uint32(0),
-		"end":                     uint32(0),
-		"freeing items":           uint32(0),
-		"flushing tables":         uint32(0),
-		"fulltext initialization": uint32(0),
+		"end":                       uint32(0),
+		"freeing items":             uint32(0),
+		"flushing tables":           uint32(0),
+		"fulltext initialization":   uint32(0),
 		"idle":                      uint32(0),
 		"init":                      uint32(0),
 		"killed":                    uint32(0),
@@ -97,8 +109,8 @@ var (
 		"other":                     uint32(0),
 	}
 	threadStateMapping = map[string]string{
-		"user sleep":                               "idle",
-		"creating index":                           "altering table",
+		"user sleep":     "idle",
+		"creating index": "altering table",
 		"committing alter table to storage engine": "altering table",
 		"discard or import tablespace":             "altering table",
 		"rename":                                   "altering table",
@@ -117,6 +129,8 @@ var (
 		"deleting from main table":                 "deleting",
 		"deleting from reference tables":           "deleting",
 	}
+	plMemoryUsedExists *bool
+	plMemoryUsedSelect string
 )
 
 func deriveThreadState(command string, state string) string {
@@ -168,8 +182,12 @@ func (ScrapeProcesslist) Version() float64 {
 
 // Scrape collects data.
 func (ScrapeProcesslist) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+	// check if column 'memory_used' exists
+	checkPLMemoryUsedColumn(ctx, db)
+
 	processQuery := fmt.Sprintf(
 		infoSchemaProcesslistQuery,
+		plMemoryUsedSelect,
 		*processlistMinTime,
 	)
 	processlistRows, err := db.QueryContext(ctx, processQuery)
@@ -179,10 +197,12 @@ func (ScrapeProcesslist) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 	defer processlistRows.Close()
 
 	var (
-		command string
-		state   string
-		count   uint32
-		time    uint32
+		command         string
+		state           string
+		count           uint32
+		time            uint32
+		memoryUsed      uint32
+		totalMemoryUsed uint64
 	)
 	stateCounts := make(map[string]uint32, len(threadStateCounterMap))
 	stateTime := make(map[string]uint32, len(threadStateCounterMap))
@@ -191,14 +211,19 @@ func (ScrapeProcesslist) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 		stateTime[k] = v
 	}
 
+	columnDests := []interface{}{&command, &state, &count, &time}
+	if plMemoryUsedExists != nil && *plMemoryUsedExists {
+		columnDests = append(columnDests, &memoryUsed)
+	}
 	for processlistRows.Next() {
-		err = processlistRows.Scan(&command, &state, &count, &time)
+		err = processlistRows.Scan(columnDests...)
 		if err != nil {
 			return err
 		}
 		realState := deriveThreadState(command, state)
 		stateCounts[realState] += count
 		stateTime[realState] += time
+		totalMemoryUsed += uint64(memoryUsed)
 	}
 
 	for state, count := range stateCounts {
@@ -207,6 +232,38 @@ func (ScrapeProcesslist) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 	for state, time := range stateTime {
 		ch <- prometheus.MustNewConstMetric(processlistTimeDesc, prometheus.GaugeValue, float64(time), state)
 	}
+	ch <- prometheus.MustNewConstMetric(processlistMemoryUsedDesc, prometheus.GaugeValue, float64(totalMemoryUsed))
 
 	return nil
+}
+
+func checkPLMemoryUsedColumn(ctx context.Context, db *sql.DB) {
+	if plMemoryUsedExists != nil {
+		return
+	}
+
+	plColumnsRows, err := db.QueryContext(ctx, infoSchemaProcesslistColumnsQuery)
+	if err != nil {
+		log.Errorln("Failed to get column names of information_schema.processlist: ", err)
+		return
+	}
+	defer plColumnsRows.Close()
+
+	var columnName string
+	boolVal := false
+	for plColumnsRows.Next() {
+		err = plColumnsRows.Scan(&columnName)
+		if err != nil {
+			log.Errorln("Failed to get column names of information_schema.processlist: ", err)
+			return
+		}
+
+		if strings.ToLower(columnName) == "memory_used" {
+			boolVal = true
+			plMemoryUsedSelect = ",sum(memory_used)"
+			break
+		}
+	}
+
+	plMemoryUsedExists = &boolVal
 }
