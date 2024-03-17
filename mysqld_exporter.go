@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -15,15 +16,17 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
+	"golang.org/x/net/proxy"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v2"
 
 	"github.com/shatteredsilicon/mysqld_exporter/collector"
+	"github.com/shatteredsilicon/ssm-managed/utils"
 )
 
 // System variable params formatting.
@@ -217,6 +220,17 @@ func parseMycnf(config interface{}) (string, error) {
 
 func init() {
 	prometheus.MustRegister(version.NewCollector("mysqld_exporter"))
+
+	proxyDialer := proxy.FromEnvironment()
+	directDialer := proxy.Direct
+	mysqlDriver.RegisterDial("tcp", func(addr string) (net.Conn, error) {
+		host, _, _ := net.SplitHostPort(addr)
+		if utils.SliceContains([]string{"localhost", "127.0.0.1"}, host) {
+			return directDialer.Dial("tcp", addr)
+		} else {
+			return proxyDialer.Dial("tcp", addr)
+		}
+	})
 }
 
 func newHandler(auth *webAuth, db *sql.DB, metrics collector.Metrics, scrapers []collector.Scraper, defaultGatherer bool) http.HandlerFunc {

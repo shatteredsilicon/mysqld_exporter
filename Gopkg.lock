@@ -95,6 +95,14 @@
   revision = "7d6f385de8bea29190f15ba9931442a0eaef9af7"
 
 [[projects]]
+  branch = "ssm-1.x"
+  digest = "1:c03501a86920a6de5f51501623ab5731aefb72be6c5035eb45b066394cc2bff9"
+  name = "github.com/shatteredsilicon/ssm-managed"
+  packages = ["utils"]
+  pruneopts = "NUT"
+  revision = "31b625d371c49a0d011c6467b1a73c5c20e5f1f7"
+
+[[projects]]
   digest = "1:6989062eb7ccf25cf38bf4fe3dba097ee209f896cda42cefdca3927047bef7b6"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
@@ -133,6 +141,17 @@
   packages = ["ssh/terminal"]
   pruneopts = "NUT"
   revision = "a8fb68e7206f8c78be19b432c58eb52a6aa34462"
+
+[[projects]]
+  digest = "1:5d21159a71aa8b29c605eafe304ef17eefade5b3bf94d1522697eb7993b8104f"
+  name = "golang.org/x/net"
+  packages = [
+    "internal/socks",
+    "proxy",
+  ]
+  pruneopts = "NUT"
+  revision = "7ee34a078aecd23a99f205bded144e5246a27d7c"
+  version = "v0.22.0"
 
 [[projects]]
   branch = "master"
@@ -190,7 +209,9 @@
     "github.com/prometheus/common/log",
     "github.com/prometheus/common/model",
     "github.com/prometheus/common/version",
+    "github.com/shatteredsilicon/ssm-managed/utils",
     "github.com/smartystreets/goconvey/convey",
+    "golang.org/x/net/proxy",
     "gopkg.in/DATA-DOG/go-sqlmock.v1",
     "gopkg.in/ini.v1",
     "gopkg.in/yaml.v2",
