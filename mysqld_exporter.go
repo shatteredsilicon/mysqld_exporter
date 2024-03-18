@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -15,11 +16,12 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
+	"golang.org/x/net/proxy"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v2"
 
@@ -219,6 +221,24 @@ func parseMycnf(config interface{}) (string, error) {
 
 func init() {
 	prometheus.MustRegister(version.NewCollector("mysqld_exporter"))
+
+	proxyDialer := proxy.FromEnvironment()
+	directDialer := proxy.Direct
+	mysqlDriver.RegisterDialContext("tcp", func(ctx context.Context, addr string) (net.Conn, error) {
+		ip, _ := net.ResolveTCPAddr("tcp", addr)
+		iAddrs, _ := net.InterfaceAddrs()
+		if ip == nil || len(iAddrs) == 0 {
+			return proxyDialer.Dial("tcp", addr)
+		}
+
+		for _, iAddr := range iAddrs {
+			if ipNet, ok := iAddr.(*net.IPNet); ok && ipNet.IP.Equal(ip.IP) {
+				return directDialer.Dial("tcp", addr)
+			}
+		}
+
+		return proxyDialer.Dial("tcp", addr)
+	})
 }
 
 func newHandler(auth *webAuth, db *sql.DB, metrics collector.Metrics, scrapers []collector.Scraper, defaultGatherer bool) http.HandlerFunc {
