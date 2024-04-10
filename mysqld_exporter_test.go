@@ -1,119 +1,37 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"reflect"
-	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/smartystreets/goconvey/convey"
+	"github.com/google/go-cmp/cmp"
+	"github.com/shatteredsilicon/mysqld_exporter/collector"
 )
-
-func TestParseMycnf(t *testing.T) {
-	const (
-		tcpConfig = `
-			[client]
-			user = root
-			password = abc123
-		`
-		tcpConfig2 = `
-			[client]
-			user = root
-			password = abc123
-			port = 3308
-		`
-		socketConfig = `
-			[client]
-			user = user
-			password = pass
-			socket = /var/lib/mysql/mysql.sock
-		`
-		socketConfig2 = `
-			[client]
-			user = dude
-			password = nopassword
-			# host and port will not be used because of socket presence
-			host = 1.2.3.4
-			port = 3307
-			socket = /var/lib/mysql/mysql.sock
-		`
-		remoteConfig = `
-			[client]
-			user = dude
-			password = nopassword
-			host = 1.2.3.4
-			port = 3307
-		`
-		badConfig = `
-			[client]
-			user = root
-		`
-		badConfig2 = `
-			[client]
-			password = abc123
-			socket = /var/lib/mysql/mysql.sock
-		`
-		badConfig3 = `
-			[hello]
-			world = ismine
-		`
-		badConfig4 = `
-			[hello]
-			world
-		`
-	)
-	convey.Convey("Various .my.cnf configurations", t, func(c convey.C) {
-		c.Convey("Local tcp connection", func() {
-			dsn, _ := parseMycnf([]byte(tcpConfig))
-			c.So(dsn, convey.ShouldEqual, "root:abc123@tcp(localhost:3306)/")
-		})
-		c.Convey("Local tcp connection on non-default port", func() {
-			dsn, _ := parseMycnf([]byte(tcpConfig2))
-			c.So(dsn, convey.ShouldEqual, "root:abc123@tcp(localhost:3308)/")
-		})
-		c.Convey("Socket connection", func() {
-			dsn, _ := parseMycnf([]byte(socketConfig))
-			c.So(dsn, convey.ShouldEqual, "user:pass@unix(/var/lib/mysql/mysql.sock)/")
-		})
-		c.Convey("Socket connection ignoring defined host", func() {
-			dsn, _ := parseMycnf([]byte(socketConfig2))
-			c.So(dsn, convey.ShouldEqual, "dude:nopassword@unix(/var/lib/mysql/mysql.sock)/")
-		})
-		c.Convey("Remote connection", func() {
-			dsn, _ := parseMycnf([]byte(remoteConfig))
-			c.So(dsn, convey.ShouldEqual, "dude:nopassword@tcp(1.2.3.4:3307)/")
-		})
-		c.Convey("Missed user", func() {
-			_, err := parseMycnf([]byte(badConfig))
-			c.So(err, convey.ShouldNotBeNil)
-		})
-		c.Convey("Missed password", func() {
-			_, err := parseMycnf([]byte(badConfig2))
-			c.So(err, convey.ShouldNotBeNil)
-		})
-		c.Convey("No [client] section", func() {
-			_, err := parseMycnf([]byte(badConfig3))
-			c.So(err, convey.ShouldNotBeNil)
-		})
-		c.Convey("Invalid config", func() {
-			_, err := parseMycnf([]byte(badConfig4))
-			c.So(err, convey.ShouldNotBeNil)
-		})
-	})
-}
 
 // bin stores information about path of executable and attached port
 type bin struct {
@@ -126,7 +44,7 @@ func TestBin(t *testing.T) {
 	var err error
 	binName := "mysqld_exporter"
 
-	binDir, err := ioutil.TempDir("/tmp", binName+"-test-bindir-")
+	binDir, err := os.MkdirTemp("/tmp", binName+"-test-bindir-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +55,7 @@ func TestBin(t *testing.T) {
 		}
 	}()
 
-	importpath := "github.com/shatteredsilicon/mysqld_exporter/vendor/github.com/prometheus/common"
+	importpath := "github.com/prometheus/common"
 	path := binDir + "/" + binName
 	xVariables := map[string]string{
 		importpath + "/version.Version":  "gotest-version",
@@ -164,9 +82,8 @@ func TestBin(t *testing.T) {
 	}
 
 	tests := []func(*testing.T, bin){
-		testLandingPage,
-		testVersion,
-		testDefaultGatherer,
+		testLanding,
+		testProbe,
 	}
 
 	portStart := 56000
@@ -187,64 +104,7 @@ func TestBin(t *testing.T) {
 	})
 }
 
-func testVersion(t *testing.T, data bin) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(
-		ctx,
-		data.path,
-		"--version",
-		"--web.listen-address", fmt.Sprintf(":%d", data.port),
-	)
-
-	b := &bytes.Buffer{}
-	cmd.Stdout = b
-	cmd.Stderr = b
-
-	if err := cmd.Run(); err != nil {
-		t.Fatal(err)
-	}
-
-	expectedRegexp := `mysqld_exporter, version gotest-version \(branch: gotest-branch, revision: gotest-revision\)
-  build user:
-  build date:
-  go version:
-`
-
-	expectedScanner := bufio.NewScanner(bytes.NewBufferString(expectedRegexp))
-	defer func() {
-		if err := expectedScanner.Err(); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	gotScanner := bufio.NewScanner(b)
-	defer func() {
-		if err := gotScanner.Err(); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	for gotScanner.Scan() {
-		if !expectedScanner.Scan() {
-			t.Fatalf("didn't expected more data but got '%s'", gotScanner.Text())
-		}
-		ok, err := regexp.MatchString(expectedScanner.Text(), gotScanner.Text())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !ok {
-			t.Fatalf("'%s' does not match regexp '%s'", gotScanner.Text(), expectedScanner.Text())
-		}
-	}
-
-	if expectedScanner.Scan() {
-		t.Errorf("expected '%s' but didn't got more data", expectedScanner.Text())
-	}
-}
-
-func testLandingPage(t *testing.T, data bin) {
+func testLanding(t *testing.T, data bin) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -253,8 +113,8 @@ func testLandingPage(t *testing.T, data bin) {
 		ctx,
 		data.path,
 		"--web.listen-address", fmt.Sprintf(":%d", data.port),
+		"--config.my-cnf=test_exporter.cnf",
 	)
-	cmd.Env = append(os.Environ(), "DATA_SOURCE_NAME=127.0.0.1:3306")
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -269,57 +129,85 @@ func testLandingPage(t *testing.T, data bin) {
 	}
 	got := string(body)
 
-	expected := `<html>
-<head><title>MySQLd 3-in-1 exporter</title></head>
-<body>
-<h1>MySQL 3-in-1 exporter</h1>
-<li><a href="/metrics-hr">high-res metrics</a></li>
-<li><a href="/metrics-mr">medium-res metrics</a></li>
-<li><a href="/metrics-lr">low-res metrics</a></li>
-</body>
+	expected := `<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQLd Exporter</title>
+    <style>body {
+  font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,Noto Sans,Liberation Sans,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;
+  margin: 0;
+}
+header {
+  background-color: #e6522c;
+  color: #fff;
+  font-size: 1rem;
+  padding: 1rem;
+}
+main {
+  padding: 1rem;
+}
+label {
+  display: inline-block;
+  width: 0.5em;
+}
+
+</style>
+  </head>
+  <body>
+    <header>
+      <h1>MySQLd Exporter</h1>
+    </header>
+    <main>
+      <h2>Prometheus Exporter for MySQL servers</h2>
+      <div>Version: (version=gotest-version, branch=gotest-branch, revision=gotest-revision)</div>
+      <div>
+        <ul>
+          
+          <li><a href="/metrics">Metrics</a></li>
+          
+        </ul>
+      </div>
+      
+      
+    </main>
+  </body>
 </html>
 `
-	if got != expected {
-		t.Fatalf("got '%s' but expected '%s'", got, expected)
+	if diff := cmp.Diff(expected, got); diff != "" {
+		t.Fatalf("expected != got \n%v\n", diff)
 	}
 }
 
-func testDefaultGatherer(t *testing.T, data bin) {
-	metricPath := "/metrics"
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+func testProbe(t *testing.T, data bin) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Run exporter.
 	cmd := exec.CommandContext(
 		ctx,
 		data.path,
-		"--web.telemetry-path", metricPath,
 		"--web.listen-address", fmt.Sprintf(":%d", data.port),
+		"--config.my-cnf=test_exporter.cnf",
 	)
-	cmd.Env = append(os.Environ(), "DATA_SOURCE_NAME=127.0.0.1:3306")
-
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	defer cmd.Wait()
 	defer cmd.Process.Kill()
 
-	const resolution = "hr"
-	body, err := waitForBody(fmt.Sprintf("http://127.0.0.1:%d%s-%s", data.port, metricPath, resolution))
+	// Get the main page.
+	urlToGet := fmt.Sprintf("http://127.0.0.1:%d/probe", data.port)
+	body, err := waitForBody(urlToGet)
 	if err != nil {
-		t.Fatalf("unable to get metrics for '%s' resolution: %s", resolution, err)
+		t.Fatal(err)
 	}
-	got := string(body)
+	got := strings.TrimSpace(string(body))
 
-	metricsPrefixes := []string{
-		"go_gc_duration_seconds",
-		"go_goroutines",
-		"go_memstats",
-	}
+	expected := `target is required`
 
-	for _, prefix := range metricsPrefixes {
-		if !strings.Contains(got, prefix) {
-			t.Fatalf("no metric starting with %s in resolution %s", prefix, resolution)
-		}
+	if got != expected {
+		t.Fatalf("got '%s' but expected '%s'", got, expected)
 	}
 }
 
@@ -363,10 +251,56 @@ func getBody(urlToGet string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
 	return body, nil
+}
+
+func Test_filterScrapers(t *testing.T) {
+	type args struct {
+		scrapers      []collector.Scraper
+		collectParams []string
+	}
+	tests := []struct {
+		name string
+		args args
+		want []collector.Scraper
+	}{
+		{"args_appears_in_collector",
+			args{
+				[]collector.Scraper{collector.ScrapeGlobalStatus{}},
+				[]string{collector.ScrapeGlobalStatus{}.Name()},
+			},
+			[]collector.Scraper{
+				collector.ScrapeGlobalStatus{},
+			}},
+		{"args_absent_in_collector",
+			args{
+				[]collector.Scraper{collector.ScrapeGlobalStatus{}},
+				[]string{collector.ScrapeGlobalVariables{}.Name()},
+			},
+			[]collector.Scraper{collector.ScrapeGlobalStatus{}}},
+		{"respect_params",
+			args{
+				[]collector.Scraper{
+					collector.ScrapeGlobalStatus{},
+					collector.ScrapeGlobalVariables{},
+				},
+				[]string{collector.ScrapeGlobalStatus{}.Name()},
+			},
+			[]collector.Scraper{
+				collector.ScrapeGlobalStatus{},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := filterScrapers(tt.args.scrapers, tt.args.collectParams); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("filterScrapers() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

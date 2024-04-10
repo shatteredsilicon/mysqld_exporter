@@ -1,3 +1,16 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Scrape `information_schema.innodb_metrics`.
 
 package collector
@@ -9,16 +22,19 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/log"
 )
 
 const infoSchemaInnodbMetricsEnabledColumnQuery = `
 	SELECT
 	    column_name
 	  FROM information_schema.columns
-	  WHERE table_name = 'INNODB_METRICS'
+	  WHERE table_schema = 'information_schema'
+	    AND table_name = 'INNODB_METRICS'
 	    AND column_name IN ('status', 'enabled')
+	  LIMIT 1
 	`
 
 const infoSchemaInnodbMetricsQuery = `
@@ -61,12 +77,12 @@ var (
 // ScrapeInnodbMetrics collects from `information_schema.innodb_metrics`.
 type ScrapeInnodbMetrics struct{}
 
-// Name of the Scraper.
+// Name of the Scraper. Should be unique.
 func (ScrapeInnodbMetrics) Name() string {
 	return informationSchema + ".innodb_metrics"
 }
 
-// Help returns additional information about Scraper.
+// Help describes the role of the Scraper.
 func (ScrapeInnodbMetrics) Help() string {
 	return "Collect metrics from information_schema.innodb_metrics"
 }
@@ -77,7 +93,7 @@ func (ScrapeInnodbMetrics) Version() float64 {
 }
 
 // Scrape collects data from database connection and sends it over channel as prometheus metric.
-func (ScrapeInnodbMetrics) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+func (ScrapeInnodbMetrics) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
 	var enabledColumnName string
 	var query string
 
@@ -92,7 +108,7 @@ func (ScrapeInnodbMetrics) Scrape(ctx context.Context, db *sql.DB, ch chan<- pro
 	case "ENABLED":
 		query = fmt.Sprintf(infoSchemaInnodbMetricsQuery, "enabled", "1")
 	default:
-		return errors.New("couldn't find column STATUS or ENABLED in innodb_metrics table")
+		return errors.New("Couldn't find column STATUS or ENABLED in innodb_metrics table.")
 	}
 
 	innodbMetricsRows, err := db.QueryContext(ctx, query)
@@ -116,7 +132,7 @@ func (ScrapeInnodbMetrics) Scrape(ctx context.Context, db *sql.DB, ch chan<- pro
 		if subsystem == "buffer_page_io" {
 			match := bufferPageRE.FindStringSubmatch(name)
 			if len(match) != 3 {
-				log.Warnln("innodb_metrics subsystem buffer_page_io returned an invalid name:", name)
+				level.Warn(logger).Log("msg", "innodb_metrics subsystem buffer_page_io returned an invalid name", "name", name)
 				continue
 			}
 			switch match[1] {
@@ -182,3 +198,6 @@ func (ScrapeInnodbMetrics) Scrape(ctx context.Context, db *sql.DB, ch chan<- pro
 	}
 	return nil
 }
+
+// check interface
+var _ Scraper = ScrapeInnodbMetrics{}

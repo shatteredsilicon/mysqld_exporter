@@ -1,3 +1,16 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Scrape `performance_schema.file_summary_by_instance`.
 
 package collector
@@ -5,9 +18,10 @@ package collector
 import (
 	"context"
 	"database/sql"
-	"flag"
 	"strings"
 
+	"github.com/alecthomas/kingpin/v2"
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -20,18 +34,26 @@ const perfFileInstancesQuery = `
 	     where FILE_NAME REGEXP ?
 	`
 
+// Tunable flags.
+var (
+	performanceSchemaFileInstancesFilter = kingpin.Flag(
+		"collect.perf_schema.file_instances.filter",
+		"RegEx file_name filter for performance_schema.file_summary_by_instance",
+	).Default(".*").String()
+
+	performanceSchemaFileInstancesRemovePrefix = kingpin.Flag(
+		"collect.perf_schema.file_instances.remove_prefix",
+		"Remove path prefix in performance_schema.file_summary_by_instance",
+	).Default("/var/lib/mysql/").String()
+)
+
+type PerfSchemaFileInstConfig struct {
+	Filter       string `ini:"perf_schema.file_instances.filter"`
+	RemovePrefix string `ini:"perf_schema.file_instances.remove_prefix"`
+}
+
 // Metric descriptors.
 var (
-	performanceSchemaFileInstancesFilter = flag.String(
-		"collect.perf_schema.file_instances.filter", ".*",
-		"RegEx file_name filter for performance_schema.file_summary_by_instance",
-	)
-
-	performanceSchemaFileInstancesRemovePrefix = flag.String(
-		"collect.perf_schema.file_instances.remove_prefix", "/var/lib/mysql/",
-		"Remove path prefix in performance_schema.file_summary_by_instance",
-	)
-
 	performanceSchemaFileInstancesBytesDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, performanceSchema, "file_instances_bytes"),
 		"The number of bytes processed by file read/write operations.",
@@ -47,12 +69,12 @@ var (
 // ScrapePerfFileInstances collects from `performance_schema.file_summary_by_instance`.
 type ScrapePerfFileInstances struct{}
 
-// Name of the Scraper.
+// Name of the Scraper. Should be unique.
 func (ScrapePerfFileInstances) Name() string {
 	return "perf_schema.file_instances"
 }
 
-// Help returns additional information about Scraper.
+// Help describes the role of the Scraper.
 func (ScrapePerfFileInstances) Help() string {
 	return "Collect metrics from performance_schema.file_summary_by_instance"
 }
@@ -62,8 +84,8 @@ func (ScrapePerfFileInstances) Version() float64 {
 	return 5.5
 }
 
-// Scrape collects data.
-func (ScrapePerfFileInstances) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+// Scrape collects data from database connection and sends it over channel as prometheus metric.
+func (ScrapePerfFileInstances) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
 	// Timers here are returned in picoseconds.
 	perfSchemaFileInstancesRows, err := db.QueryContext(ctx, perfFileInstancesQuery, *performanceSchemaFileInstancesFilter)
 	if err != nil {
@@ -107,3 +129,6 @@ func (ScrapePerfFileInstances) Scrape(ctx context.Context, db *sql.DB, ch chan<-
 	}
 	return nil
 }
+
+// check interface
+var _ Scraper = ScrapePerfFileInstances{}

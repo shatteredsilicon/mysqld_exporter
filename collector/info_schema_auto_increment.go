@@ -1,3 +1,16 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Scrape auto_increment column information.
 
 package collector
@@ -6,6 +19,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -18,12 +32,12 @@ const infoSchemaAutoIncrementQuery = `
 		    when 'int'       then 31
 		    when 'bigint'    then 63
 		    end+(column_type like '% unsigned'))-1 as max_int
-		  FROM information_schema.tables t
-		  JOIN information_schema.columns c
-		    ON BINARY t.table_schema = c.table_schema AND BINARY t.table_name = c.table_name
+		  FROM information_schema.columns c
+		  STRAIGHT_JOIN information_schema.tables t USING (table_schema,table_name)
 		  WHERE c.extra = 'auto_increment' AND t.auto_increment IS NOT NULL
 		`
 
+// Metric descriptors.
 var (
 	globalInfoSchemaAutoIncrementDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, informationSchema, "auto_increment_column"),
@@ -40,12 +54,12 @@ var (
 // ScrapeAutoIncrementColumns collects auto_increment column information.
 type ScrapeAutoIncrementColumns struct{}
 
-// Name of the Scraper.
+// Name of the Scraper. Should be unique.
 func (ScrapeAutoIncrementColumns) Name() string {
 	return "auto_increment.columns"
 }
 
-// Help returns additional information about Scraper.
+// Help describes the role of the Scraper.
 func (ScrapeAutoIncrementColumns) Help() string {
 	return "Collect auto_increment columns and max values from information_schema"
 }
@@ -55,8 +69,8 @@ func (ScrapeAutoIncrementColumns) Version() float64 {
 	return 5.1
 }
 
-// Scrape collects data.
-func (ScrapeAutoIncrementColumns) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+// Scrape collects data from database connection and sends it over channel as prometheus metric.
+func (ScrapeAutoIncrementColumns) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
 	autoIncrementRows, err := db.QueryContext(ctx, infoSchemaAutoIncrementQuery)
 	if err != nil {
 		return err
@@ -85,3 +99,6 @@ func (ScrapeAutoIncrementColumns) Scrape(ctx context.Context, db *sql.DB, ch cha
 	}
 	return nil
 }
+
+// check interface
+var _ Scraper = ScrapeAutoIncrementColumns{}

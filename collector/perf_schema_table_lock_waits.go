@@ -1,3 +1,16 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Scrape `performance_schema.table_lock_waits_summary_by_table`.
 
 package collector
@@ -6,6 +19,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -64,12 +78,12 @@ var (
 // ScrapePerfTableLockWaits collects from `performance_schema.table_lock_waits_summary_by_table`.
 type ScrapePerfTableLockWaits struct{}
 
-// Name of the Scraper.
+// Name of the Scraper. Should be unique.
 func (ScrapePerfTableLockWaits) Name() string {
 	return "perf_schema.tablelocks"
 }
 
-// Help returns additional information about Scraper.
+// Help describes the role of the Scraper.
 func (ScrapePerfTableLockWaits) Help() string {
 	return "Collect metrics from performance_schema.table_lock_waits_summary_by_table"
 }
@@ -79,8 +93,8 @@ func (ScrapePerfTableLockWaits) Version() float64 {
 	return 5.6
 }
 
-// Scrape collects data.
-func (ScrapePerfTableLockWaits) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+// Scrape collects data from database connection and sends it over channel as prometheus metric.
+func (ScrapePerfTableLockWaits) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
 	perfSchemaTableLockWaitsRows, err := db.QueryContext(ctx, perfTableLockWaitsQuery)
 	if err != nil {
 		return err
@@ -222,3 +236,6 @@ func (ScrapePerfTableLockWaits) Scrape(ctx context.Context, db *sql.DB, ch chan<
 	}
 	return nil
 }
+
+// check interface
+var _ Scraper = ScrapePerfTableLockWaits{}
