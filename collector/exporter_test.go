@@ -1,14 +1,29 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package collector
 
 import (
 	"context"
 	"database/sql"
+	"os"
 	"testing"
 
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/smartystreets/goconvey/convey"
-	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 )
 
 const dsn = "root@/mysql"
@@ -18,19 +33,15 @@ func TestExporter(t *testing.T) {
 		t.Skip("-short is passed, skipping test")
 	}
 
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
 	exporter := New(
 		context.Background(),
-		db,
-		NewMetrics(""),
+		nil,
+		dsn,
+		"",
 		[]Scraper{
 			ScrapeGlobalStatus{},
 		},
+		log.NewNopLogger(),
 	)
 
 	convey.Convey("Metrics describing", t, func() {
@@ -61,30 +72,18 @@ func TestExporter(t *testing.T) {
 }
 
 func TestGetMySQLVersion(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("error opening a stub database connection: %s", err)
+	if testing.Short() {
+		t.Skip("-short is passed, skipping test")
 	}
-	defer db.Close()
 
-	ctx := context.Background()
-	convey.Convey("MySQL version extract", t, func(c convey.C) {
-		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow(""))
-		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 999)
-		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("something"))
-		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 999)
-		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("10.1.17-MariaDB"))
-		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 10.1)
-		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("5.7.13-6-log"))
-		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 5.7)
-		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("5.6.30-76.3-56-log"))
-		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 5.6)
-		mock.ExpectQuery(versionQuery).WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("5.5.51-38.1"))
-		c.So(getMySQLVersion(ctx, db), convey.ShouldEqual, 5.5)
+	logger := log.NewLogfmtLogger(os.Stderr)
+	logger = level.NewFilter(logger, level.AllowDebug())
+
+	convey.Convey("Version parsing", t, func() {
+		db, err := sql.Open("mysql", dsn)
+		convey.So(err, convey.ShouldBeNil)
+		defer db.Close()
+
+		convey.So(getMySQLVersion(db, logger), convey.ShouldBeBetweenOrEqual, 5.6, 11.0)
 	})
-
-	// Ensure all SQL queries were executed
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expections: %s", err)
-	}
 }

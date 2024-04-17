@@ -1,3 +1,16 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Scrape `information_schema.tables`.
 
 package collector
@@ -5,10 +18,11 @@ package collector
 import (
 	"context"
 	"database/sql"
-	"flag"
 	"fmt"
 	"strings"
 
+	"github.com/alecthomas/kingpin/v2"
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -42,11 +56,20 @@ const (
 	`
 )
 
+// Tunable flags.
 var (
-	tableSchemaDatabases = flag.String(
-		"collect.info_schema.tables.databases", "*",
+	tableSchemaDatabases = kingpin.Flag(
+		"collect.info_schema.tables.databases",
 		"The list of databases to collect table stats for, or '*' for all",
-	)
+	).Default("*").String()
+)
+
+type InfoSchemaTablesConfig struct {
+	Databases string `ini:"info_schema.tables.databases"`
+}
+
+// Metric descriptors.
+var (
 	infoSchemaTablesVersionDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, informationSchema, "table_version"),
 		"The version number of the table's .frm file",
@@ -72,12 +95,12 @@ var (
 // ScrapeTableSchema collects from `information_schema.tables`.
 type ScrapeTableSchema struct{}
 
-// Name of the Scraper.
+// Name of the Scraper. Should be unique.
 func (ScrapeTableSchema) Name() string {
 	return informationSchema + ".tables"
 }
 
-// Help returns additional information about Scraper.
+// Help describes the role of the Scraper.
 func (ScrapeTableSchema) Help() string {
 	return "Collect metrics from information_schema.tables"
 }
@@ -87,8 +110,8 @@ func (ScrapeTableSchema) Version() float64 {
 	return 5.1
 }
 
-// Scrape collects data.
-func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+// Scrape collects data from database connection and sends it over channel as prometheus metric.
+func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
 	var dbList []string
 	if *tableSchemaDatabases == "*" {
 		dbListRows, err := db.QueryContext(ctx, dbListQuery)
@@ -181,3 +204,6 @@ func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 	ch <- prometheus.MustNewConstMetric(infoSchemaTablesCountDesc, prometheus.GaugeValue, float64(tableCount))
 	return nil
 }
+
+// check interface
+var _ Scraper = ScrapeTableSchema{}

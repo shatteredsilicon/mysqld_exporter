@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/smartystreets/goconvey/convey"
 	"gopkg.in/DATA-DOG/go-sqlmock.v1"
@@ -28,7 +29,7 @@ func TestScrapeIndexStat(t *testing.T) {
 
 	ch := make(chan prometheus.Metric)
 	go func() {
-		if err = (ScrapeIndexStat{}).Scrape(context.Background(), db, ch); err != nil {
+		if err = (ScrapeIndexStat{}).Scrape(context.Background(), db, ch, log.NewNopLogger()); err != nil {
 			t.Errorf("error calling function on test: %s", err)
 		}
 		close(ch)

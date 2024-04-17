@@ -1,3 +1,16 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Scrape `information_schema.query_response_time*` tables.
 
 package collector
@@ -8,8 +21,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/log"
 )
 
 const queryResponseCheckQuery = `SELECT @@query_response_time_stats`
@@ -89,12 +103,12 @@ func processQueryResponseTimeTable(ctx context.Context, db *sql.DB, ch chan<- pr
 // ScrapeQueryResponseTime collects from `information_schema.query_response_time`.
 type ScrapeQueryResponseTime struct{}
 
-// Name of the Scraper.
+// Name of the Scraper. Should be unique.
 func (ScrapeQueryResponseTime) Name() string {
 	return "info_schema.query_response_time"
 }
 
-// Help returns additional information about Scraper.
+// Help describes the role of the Scraper.
 func (ScrapeQueryResponseTime) Help() string {
 	return "Collect query response time distribution if query_response_time_stats is ON."
 }
@@ -104,16 +118,16 @@ func (ScrapeQueryResponseTime) Version() float64 {
 	return 5.5
 }
 
-// Scrape collects data.
-func (ScrapeQueryResponseTime) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+// Scrape collects data from database connection and sends it over channel as prometheus metric.
+func (ScrapeQueryResponseTime) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
 	var queryStats uint8
 	err := db.QueryRowContext(ctx, queryResponseCheckQuery).Scan(&queryStats)
 	if err != nil {
-		log.Debugln("Query response time distribution is not present.")
+		level.Debug(logger).Log("msg", "Query response time distribution is not available.")
 		return nil
 	}
 	if queryStats == 0 {
-		log.Debugln("query_response_time_stats is OFF.")
+		level.Debug(logger).Log("msg", "MySQL variable is OFF.", "var", "query_response_time_stats")
 		return nil
 	}
 
@@ -127,3 +141,6 @@ func (ScrapeQueryResponseTime) Scrape(ctx context.Context, db *sql.DB, ch chan<-
 	}
 	return nil
 }
+
+// check interface
+var _ Scraper = ScrapeQueryResponseTime{}

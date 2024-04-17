@@ -1,3 +1,16 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Scrape `SHOW GLOBAL VARIABLES`.
 
 package collector
@@ -9,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -108,12 +122,12 @@ var (
 // ScrapeGlobalVariables collects from `SHOW GLOBAL VARIABLES`.
 type ScrapeGlobalVariables struct{}
 
-// Name of the Scraper.
+// Name of the Scraper. Should be unique.
 func (ScrapeGlobalVariables) Name() string {
 	return globalVariables
 }
 
-// Help returns additional information about Scraper.
+// Help describes the role of the Scraper.
 func (ScrapeGlobalVariables) Help() string {
 	return "Collect from SHOW GLOBAL VARIABLES"
 }
@@ -123,8 +137,8 @@ func (ScrapeGlobalVariables) Version() float64 {
 	return 5.1
 }
 
-// Scrape collects data.
-func (ScrapeGlobalVariables) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+// Scrape collects data from database connection and sends it over channel as prometheus metric.
+func (ScrapeGlobalVariables) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
 	globalVariablesRows, err := db.QueryContext(ctx, globalVariablesQuery)
 	if err != nil {
 		return err
@@ -139,6 +153,8 @@ func (ScrapeGlobalVariables) Scrape(ctx context.Context, db *sql.DB, ch chan<- p
 		"version_comment":        "",
 		"wsrep_cluster_name":     "",
 		"wsrep_provider_options": "",
+		"tx_isolation":           "",
+		"transaction_isolation":  "",
 	}
 
 	for globalVariablesRows.Next() {
@@ -190,6 +206,20 @@ func (ScrapeGlobalVariables) Scrape(ctx context.Context, db *sql.DB, ch chan<- p
 		)
 	}
 
+	// mysql_transaction_isolation metric.
+	if textItems["transaction_isolation"] != "" || textItems["tx_isolation"] != "" {
+		level := textItems["transaction_isolation"]
+		if level == "" {
+			level = textItems["tx_isolation"]
+		}
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(prometheus.BuildFQName(namespace, "transaction", "isolation"), "MySQL transaction isolation.",
+				[]string{"level"}, nil),
+			prometheus.GaugeValue,
+			1, level,
+		)
+	}
+
 	return nil
 }
 
@@ -219,3 +249,6 @@ func validPrometheusName(s string) string {
 	s = strings.ToLower(s)
 	return s
 }
+
+// check interface
+var _ Scraper = ScrapeGlobalVariables{}

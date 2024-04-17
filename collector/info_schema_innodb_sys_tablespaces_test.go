@@ -1,13 +1,28 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package collector
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/smartystreets/goconvey/convey"
-	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 )
 
 func TestScrapeInfoSchemaInnodbTablespaces(t *testing.T) {
@@ -17,15 +32,22 @@ func TestScrapeInfoSchemaInnodbTablespaces(t *testing.T) {
 	}
 	defer db.Close()
 
-	columns := []string{"SPACE", "NAME", "FILE_FORMAT", "ROW_FORMAT", "SPACE_TYPE", "FILE_SIZE", "ALLOCATED_SIZE"}
+	columns := []string{"TABLE_NAME"}
 	rows := sqlmock.NewRows(columns).
+		AddRow("INNODB_SYS_TABLESPACES")
+	mock.ExpectQuery(sanitizeQuery(innodbTablespacesTablenameQuery)).WillReturnRows(rows)
+
+	tablespacesTablename := "INNODB_SYS_TABLESPACES"
+	columns = []string{"SPACE", "NAME", "FILE_FORMAT", "ROW_FORMAT", "SPACE_TYPE", "FILE_SIZE", "ALLOCATED_SIZE"}
+	rows = sqlmock.NewRows(columns).
 		AddRow(1, "sys/sys_config", "Barracuda", "Dynamic", "Single", 100, 100).
 		AddRow(2, "db/compressed", "Barracuda", "Compressed", "Single", 300, 200)
-	mock.ExpectQuery(sanitizeQuery(innodbTablespacesQuery)).WillReturnRows(rows)
+	query := fmt.Sprintf(innodbTablespacesQuery, tablespacesTablename, tablespacesTablename)
+	mock.ExpectQuery(sanitizeQuery(query)).WillReturnRows(rows)
 
 	ch := make(chan prometheus.Metric)
 	go func() {
-		if err = (ScrapeInfoSchemaInnodbTablespaces{}).Scrape(context.Background(), db, ch); err != nil {
+		if err = (ScrapeInfoSchemaInnodbTablespaces{}).Scrape(context.Background(), db, ch, log.NewNopLogger()); err != nil {
 			t.Errorf("error calling function on test: %s", err)
 		}
 		close(ch)
@@ -48,6 +70,6 @@ func TestScrapeInfoSchemaInnodbTablespaces(t *testing.T) {
 
 	// Ensure all SQL queries were executed
 	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expections: %s", err)
+		t.Errorf("there were unfulfilled exceptions: %s", err)
 	}
 }

@@ -1,3 +1,16 @@
+// Copyright 2018 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Scrape `SHOW BINARY LOGS`
 
 package collector
@@ -5,9 +18,11 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -38,15 +53,15 @@ var (
 	)
 )
 
-// ScrapeBinlogSize colects from `SHOW BINARY LOGS`.
+// ScrapeBinlogSize collects from `SHOW BINARY LOGS`.
 type ScrapeBinlogSize struct{}
 
-// Name of the Scraper.
+// Name of the Scraper. Should be unique.
 func (ScrapeBinlogSize) Name() string {
 	return "binlog_size"
 }
 
-// Help returns additional information about Scraper.
+// Help describes the role of the Scraper.
 func (ScrapeBinlogSize) Help() string {
 	return "Collect the current size of all registered binlog files"
 }
@@ -56,8 +71,8 @@ func (ScrapeBinlogSize) Version() float64 {
 	return 5.1
 }
 
-// Scrape collects data.
-func (ScrapeBinlogSize) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric) error {
+// Scrape collects data from database connection and sends it over channel as prometheus metric.
+func (ScrapeBinlogSize) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
 	var logBin uint8
 	err := db.QueryRowContext(ctx, logbinQuery).Scan(&logBin)
 	if err != nil {
@@ -74,31 +89,36 @@ func (ScrapeBinlogSize) Scrape(ctx context.Context, db *sql.DB, ch chan<- promet
 	}
 	defer masterLogRows.Close()
 
-	masterLogCols, err := masterLogRows.Columns()
-	if err != nil {
-		return err
-	}
-
 	var (
-		size     uint64
-		count    uint64
-		filename string
-		filesize uint64
+		size      uint64
+		count     uint64
+		filename  string
+		filesize  uint64
+		encrypted string
 	)
 	size = 0
 	count = 0
 
-	// SHOW BINARY LOGS output may has extra columns
-	columns := []interface{}{&filename, &filesize}
-	for i := 2; i < len(masterLogCols); i++ {
-		var tmp interface{}
-		columns = append(columns, &tmp)
+	columns, err := masterLogRows.Columns()
+	if err != nil {
+		return err
 	}
+	columnCount := len(columns)
 
 	for masterLogRows.Next() {
-		if err := masterLogRows.Scan(columns...); err != nil {
-			return nil
+		switch columnCount {
+		case 2:
+			if err := masterLogRows.Scan(&filename, &filesize); err != nil {
+				return nil
+			}
+		case 3:
+			if err := masterLogRows.Scan(&filename, &filesize, &encrypted); err != nil {
+				return nil
+			}
+		default:
+			return fmt.Errorf("invalid number of columns: %q", columnCount)
 		}
+
 		size += filesize
 		count++
 	}
@@ -117,3 +137,6 @@ func (ScrapeBinlogSize) Scrape(ctx context.Context, db *sql.DB, ch chan<- promet
 
 	return nil
 }
+
+// check interface
+var _ Scraper = ScrapeBinlogSize{}
