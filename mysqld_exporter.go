@@ -572,15 +572,17 @@ func main() {
 		_, _ = w.Write([]byte(`ok`))
 	})
 
-	authConfigBytes, err := os.ReadFile(*webAuthFile)
-	if err != nil {
-		level.Error(logger).Log("err", err)
-		os.Exit(1)
-	}
 	var authC authConfig
-	if err := yaml.Unmarshal(authConfigBytes, &authC); err != nil {
-		level.Error(logger).Log("err", err)
-		os.Exit(1)
+	if *webAuthFile != "" {
+		authConfigBytes, err := os.ReadFile(*webAuthFile)
+		if err != nil {
+			level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
+		if err := yaml.Unmarshal(authConfigBytes, &authC); err != nil {
+			level.Error(logger).Log("err", err)
+			os.Exit(1)
+		}
 	}
 
 	tlsMinVer := (web.TLSVersion)(tls.VersionTLS10)
