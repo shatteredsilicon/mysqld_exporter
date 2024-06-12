@@ -65,7 +65,7 @@ var (
 	webConfigFile = kingpin.Flag(
 		"web.config.file",
 		"Path to prometheus web config file (YAML).",
-	).String()
+	).Default("/opt/ss/ssm-client/mysqld_exporter.yml").String()
 	systemdSocket = kingpin.Flag(
 		"web.systemd-socket",
 		"Use systemd socket activation listeners instead of port listeners (Linux only).",
@@ -684,13 +684,13 @@ type collectConfig struct {
 }
 
 type webConfig struct {
-	ListenAddress string `ini:"listen-address"`
-	TelemetryPath string `ini:"telemetry-path"`
-	AuthFile      string `ini:"auth-file"`
-	ConfigFile    string `ini:"config.file"`
-	SSLCertFile   string `ini:"ssl-cert-file"`
-	SSLKeyFile    string `ini:"ssl-key-file"`
-	SystemdSocket bool   `ini:"systemd-socket"`
+	ListenAddress string  `ini:"listen-address"`
+	TelemetryPath string  `ini:"telemetry-path"`
+	AuthFile      string  `ini:"auth-file"`
+	ConfigFile    *string `ini:"config.file"`
+	SSLCertFile   string  `ini:"ssl-cert-file"`
+	SSLKeyFile    string  `ini:"ssl-key-file"`
+	SystemdSocket bool    `ini:"systemd-socket"`
 }
 
 type exporterConfig struct {
@@ -749,6 +749,8 @@ func configVisit(visitFn func(string, string, reflect.Value)) {
 					})
 				}
 				continue
+			} else if fieldValue.Kind() == reflect.Ptr && fieldValue.Type().Elem().Kind() == reflect.String && fieldValue.IsNil() {
+				continue
 			}
 
 			visitFn(section, key, fieldValue)
@@ -767,6 +769,8 @@ func configure() error {
 	}
 
 	configVisit(func(section, key string, fieldValue reflect.Value) {
+		iniCfg.Section(section).Key(key).SetValue(fieldValue.String())
+
 		flagKey := fmt.Sprintf("%s.%s", section, key)
 		if section == "" {
 			flagKey = key
