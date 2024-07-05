@@ -48,8 +48,8 @@ var (
 )
 
 type PerfSchemaFileInstConfig struct {
-	Filter       string `ini:"perf_schema.file_instances.filter"`
-	RemovePrefix string `ini:"perf_schema.file_instances.remove_prefix"`
+	Filter       *string `ini:"perf_schema.file_instances.filter"`
+	RemovePrefix *string `ini:"perf_schema.file_instances.remove_prefix"`
 }
 
 // Metric descriptors.
