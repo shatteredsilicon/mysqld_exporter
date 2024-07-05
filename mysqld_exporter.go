@@ -159,7 +159,7 @@ var scrapers = map[collector.Scraper]bool{
 	collector.ScrapeInnodbCmpMem{}:                        true,
 	collector.ScrapeQueryResponseTime{}:                   true,
 	collector.ScrapeEngineTokudbStatus{}:                  false,
-	collector.ScrapeEngineInnodbStatus{}:                  false,
+	collector.ScrapeEngineInnodbStatus{}:                  true,
 	collector.ScrapeHeartbeat{}:                           false,
 	collector.ScrapeSlaveHosts{}:                          false,
 	collector.ScrapeReplicaHost{}:                         false,
@@ -311,8 +311,8 @@ func newHandler(db *sql.DB, scrapers []collector.Scraper, logger log.Logger) htt
 }
 
 func reloadMySqlConfig(logger log.Logger) error {
-	if cfg.Exporter.DSN != "" { // DSN has higher priority
-		if err := c.ReloadConfigFromDSN(cfg.Exporter.DSN, logger); err != nil {
+	if cfg.Exporter.DSN != nil && *cfg.Exporter.DSN != "" { // DSN has higher priority
+		if err := c.ReloadConfigFromDSN(*cfg.Exporter.DSN, logger); err != nil {
 			return err
 		}
 	} else {
@@ -482,11 +482,12 @@ func main() {
 		stdlog.Fatalf(fmt.Sprintf("Load config file %s failed: %s\n", *configPath, err.Error()))
 	}
 
-	if cfg.Config.MyCnf == "" {
-		cfg.Config.MyCnf = path.Join(os.Getenv("HOME"), ".my.cnf")
+	if cfg.Config.MyCnf == nil || *cfg.Config.MyCnf == "" {
+		defaultMyCnf := path.Join(os.Getenv("HOME"), ".my.cnf")
+		cfg.Config.MyCnf = &defaultMyCnf
 	}
 	if dsn := os.Getenv("DATA_SOURCE_NAME"); dsn != "" {
-		cfg.Exporter.DSN = dsn
+		cfg.Exporter.DSN = &dsn
 	}
 
 	if os.Getenv("ON_CONFIGURE") == "1" {
@@ -684,27 +685,27 @@ type collectConfig struct {
 }
 
 type webConfig struct {
-	ListenAddress string  `ini:"listen-address"`
-	TelemetryPath string  `ini:"telemetry-path"`
-	AuthFile      string  `ini:"auth-file"`
+	ListenAddress *string `ini:"listen-address"`
+	TelemetryPath *string `ini:"telemetry-path"`
+	AuthFile      *string `ini:"auth-file"`
 	ConfigFile    *string `ini:"config.file"`
-	SSLCertFile   string  `ini:"ssl-cert-file"`
-	SSLKeyFile    string  `ini:"ssl-key-file"`
+	SSLCertFile   *string `ini:"ssl-cert-file"`
+	SSLKeyFile    *string `ini:"ssl-key-file"`
 	SystemdSocket bool    `ini:"systemd-socket"`
 }
 
 type exporterConfig struct {
-	LockWaitTimeout int    `ini:"lock_wait_timeout"`
-	LogSlowFilter   bool   `ini:"log_slow_filter"`
-	GlobalConnPool  bool   `ini:"global-conn-pool"`
-	MaxOpenConns    int    `ini:"max-open-conns"`
-	MaxIdleConns    int    `ini:"max-idle-conns"`
-	ConnMaxLifetime string `ini:"conn-max-lifetime"`
-	DSN             string `ini:"dsn"`
+	LockWaitTimeout int     `ini:"lock_wait_timeout"`
+	LogSlowFilter   bool    `ini:"log_slow_filter"`
+	GlobalConnPool  bool    `ini:"global-conn-pool"`
+	MaxOpenConns    int     `ini:"max-open-conns"`
+	MaxIdleConns    int     `ini:"max-idle-conns"`
+	ConnMaxLifetime *string `ini:"conn-max-lifetime"`
+	DSN             *string `ini:"dsn"`
 }
 
 type configConfig struct {
-	MyCnf string `ini:"my-cnf"`
+	MyCnf *string `ini:"my-cnf"`
 }
 
 type tlsConfig struct {
@@ -831,6 +832,12 @@ func overrideFlags() {
 				kingpinF.Model().Value.Set(strconv.FormatUint(values[i].Uint(), 10))
 			case reflect.Bool:
 				kingpinF.Model().Value.Set(strconv.FormatBool(values[i].Bool()))
+			case reflect.Ptr:
+				if values[i].IsNil() {
+					kingpinF.Model().Value.Set("")
+				} else {
+					kingpinF.Model().Value.Set(values[i].Elem().String())
+				}
 			default:
 				kingpinF.Model().Value.Set(values[i].String())
 			}

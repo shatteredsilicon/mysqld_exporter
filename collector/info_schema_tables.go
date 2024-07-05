@@ -65,7 +65,7 @@ var (
 )
 
 type InfoSchemaTablesConfig struct {
-	Databases string `ini:"info_schema.tables.databases"`
+	Databases *string `ini:"info_schema.tables.databases"`
 }
 
 // Metric descriptors.
