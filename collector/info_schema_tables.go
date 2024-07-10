@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/go-kit/log"
@@ -53,6 +54,12 @@ const (
 	tableCountQuery = `
 		SELECT COUNT(1)
 		FROM information_schema.tables;
+	`
+
+	innodbTableIndexLengthQuery = `
+		SELECT SUM(INDEX_LENGTH)
+		FROM   information_schema.tables
+		WHERE  ENGINE='InnoDB';
 	`
 )
 
@@ -90,6 +97,16 @@ var (
 		"The count of the table components from information_schema.tables",
 		nil, nil,
 	)
+	infoSchemaInnodbTableIndexLengthDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, informationSchema, "innodb_table_index_length_size"),
+		"The sum of the innodb table index_length size from information_schema.tables",
+		nil, nil,
+	)
+)
+
+var (
+	lastInnodbTableIndexLengthSize         int64
+	lastInnodbTableIndexLengthSizePolledAt time.Time
 )
 
 // ScrapeTableSchema collects from `information_schema.tables`.
@@ -200,8 +217,20 @@ func (ScrapeTableSchema) Scrape(ctx context.Context, db *sql.DB, ch chan<- prome
 	if err != nil {
 		return err
 	}
-
 	ch <- prometheus.MustNewConstMetric(infoSchemaTablesCountDesc, prometheus.GaugeValue, float64(tableCount))
+
+	if time.Since(lastInnodbTableIndexLengthSizePolledAt) < time.Hour {
+		// Only updates mysql_info_schema_innodb_table_index_length_size once per hour
+		ch <- prometheus.MustNewConstMetric(infoSchemaInnodbTableIndexLengthDesc, prometheus.GaugeValue, float64(lastInnodbTableIndexLengthSize))
+		return nil
+	}
+
+	if err = db.QueryRowContext(ctx, innodbTableIndexLengthQuery).Scan(&lastInnodbTableIndexLengthSize); err != nil {
+		return err
+	}
+	lastInnodbTableIndexLengthSizePolledAt = time.Now()
+	ch <- prometheus.MustNewConstMetric(infoSchemaInnodbTableIndexLengthDesc, prometheus.GaugeValue, float64(lastInnodbTableIndexLengthSize))
+
 	return nil
 }
 
