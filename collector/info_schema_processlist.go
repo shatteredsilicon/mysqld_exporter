@@ -19,13 +19,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"sort"
 	"strings"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -40,7 +39,7 @@ const infoSchemaProcesslistQuery = `
 		  FROM information_schema.processlist
 		  WHERE ID != connection_id()
 		    AND TIME >= %d
-		  GROUP BY user, SUBSTRING_INDEX(host, ':', 1), command, state
+		  GROUP BY user, host, command, state
 	`
 
 const infoSchemaProcesslistColumnsQuery = `
@@ -119,16 +118,16 @@ func (ScrapeProcesslist) Version() float64 {
 	return 5.1
 }
 
-// Scrape collects data from database connection and sends it over channel as prometheus metric.
-func (ScrapeProcesslist) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
+func (ScrapeProcesslist) Scrape(ctx context.Context, instance *instance, ch chan<- prometheus.Metric, logger *slog.Logger) error {
 	// check if column 'memory_used' exists
-	checkPLMemoryUsedColumn(ctx, db, logger)
+	checkPLMemoryUsedColumn(ctx, instance.db, logger)
 
 	processQuery := fmt.Sprintf(
 		infoSchemaProcesslistQuery,
 		plMemoryUsedSelect,
 		*processlistMinTime,
 	)
+	db := instance.getDB()
 	processlistRows, err := db.QueryContext(ctx, processQuery)
 	if err != nil {
 		return err
@@ -241,14 +240,14 @@ func sanitizeState(state string) string {
 	return state
 }
 
-func checkPLMemoryUsedColumn(ctx context.Context, db *sql.DB, logger log.Logger) {
+func checkPLMemoryUsedColumn(ctx context.Context, db *sql.DB, logger *slog.Logger) {
 	if plMemoryUsedExists != nil {
 		return
 	}
 
 	plColumnsRows, err := db.QueryContext(ctx, infoSchemaProcesslistColumnsQuery)
 	if err != nil {
-		level.Error(logger).Log("Failed to get column names of information_schema.processlist: ", err)
+		logger.Error("Failed to get column names of information_schema.processlist: ", err)
 		return
 	}
 	defer plColumnsRows.Close()
@@ -258,7 +257,7 @@ func checkPLMemoryUsedColumn(ctx context.Context, db *sql.DB, logger log.Logger)
 	for plColumnsRows.Next() {
 		err = plColumnsRows.Scan(&columnName)
 		if err != nil {
-			level.Error(logger).Log("Failed to get column names of information_schema.processlist: ", err)
+			logger.Error("Failed to get column names of information_schema.processlist: ", err)
 			return
 		}
 

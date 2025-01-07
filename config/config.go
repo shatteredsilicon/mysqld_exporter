@@ -17,14 +17,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
-
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/prometheus/client_golang/prometheus"
@@ -44,8 +42,6 @@ var (
 		Name:      "config_last_reload_success_timestamp_seconds",
 		Help:      "Timestamp of the last successful configuration reload.",
 	})
-
-	cfg *ini.File
 
 	opts = ini.LoadOptions{
 		// Do not error on nonexistent file to allow empty string as filename input
@@ -86,7 +82,7 @@ func (ch *MySqlConfigHandler) GetConfig() *Config {
 	return ch.Config
 }
 
-func (ch *MySqlConfigHandler) ReloadConfig(filename string, mysqldAddress string, mysqldUser string, tlsInsecureSkipVerify bool, logger log.Logger) error {
+func (ch *MySqlConfigHandler) ReloadConfig(filename string, mysqldAddress string, mysqldUser string, tlsInsecureSkipVerify bool, logger *slog.Logger) error {
 	var host, port string
 	defer func() {
 		if err != nil {
@@ -97,12 +93,13 @@ func (ch *MySqlConfigHandler) ReloadConfig(filename string, mysqldAddress string
 		}
 	}()
 
-	if cfg, err = ini.LoadSources(
+	cfg, err := ini.LoadSources(
 		opts,
 		[]byte("[client]\npassword = ${MYSQLD_EXPORTER_PASSWORD}\n"),
 		filename,
-	); err != nil {
-		return fmt.Errorf("failed to load %s: %w", filename, err)
+	)
+	if err != nil {
+		return fmt.Errorf("failed to load config from %s: %w", filename, err)
 	}
 
 	if host, port, err = net.SplitHostPort(mysqldAddress); err != nil {
@@ -135,19 +132,13 @@ func (ch *MySqlConfigHandler) ReloadConfig(filename string, mysqldAddress string
 			TlsInsecureSkipVerify: tlsInsecureSkipVerify,
 		}
 
-		// FIXME: this error check seems orphaned
-		if err != nil {
-			level.Error(logger).Log("msg", "failed to load config", "section", sectionName, "err", err)
-			continue
-		}
-
 		err = sec.StrictMapTo(mysqlcfg)
 		if err != nil {
-			level.Error(logger).Log("msg", "failed to parse config", "section", sectionName, "err", err)
+			logger.Error("failed to parse config", "section", sectionName, "err", err)
 			continue
 		}
 		if err := mysqlcfg.validateConfig(); err != nil {
-			level.Error(logger).Log("msg", "failed to validate config", "section", sectionName, "err", err)
+			logger.Error("failed to validate config", "section", sectionName, "err", err)
 			continue
 		}
 
@@ -163,7 +154,7 @@ func (ch *MySqlConfigHandler) ReloadConfig(filename string, mysqldAddress string
 	return nil
 }
 
-func (ch *MySqlConfigHandler) ReloadConfigFromDSN(dsn string, logger log.Logger) error {
+func (ch *MySqlConfigHandler) ReloadConfigFromDSN(dsn string, logger *slog.Logger) error {
 	var dsnCfg *mysql.Config
 	var host, portStr, socket string
 	var port int
