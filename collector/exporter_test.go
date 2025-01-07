@@ -15,14 +15,11 @@ package collector
 
 import (
 	"context"
-	"database/sql"
-	"os"
 	"testing"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/common/promslog"
 	"github.com/smartystreets/goconvey/convey"
 )
 
@@ -37,11 +34,10 @@ func TestExporter(t *testing.T) {
 		context.Background(),
 		nil,
 		dsn,
-		"",
 		[]Scraper{
 			ScrapeGlobalStatus{},
 		},
-		log.NewNopLogger(),
+		promslog.NewNopLogger(),
 	)
 
 	convey.Convey("Metrics describing", t, func() {
@@ -68,22 +64,5 @@ func TestExporter(t *testing.T) {
 				c.So(got.value, convey.ShouldEqual, 1)
 			}
 		}
-	})
-}
-
-func TestGetMySQLVersion(t *testing.T) {
-	if testing.Short() {
-		t.Skip("-short is passed, skipping test")
-	}
-
-	logger := log.NewLogfmtLogger(os.Stderr)
-	logger = level.NewFilter(logger, level.AllowDebug())
-
-	convey.Convey("Version parsing", t, func() {
-		db, err := sql.Open("mysql", dsn)
-		convey.So(err, convey.ShouldBeNil)
-		defer db.Close()
-
-		convey.So(getMySQLVersion(db, logger), convey.ShouldBeBetweenOrEqual, 5.6, 11.0)
 	})
 }

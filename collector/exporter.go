@@ -17,15 +17,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
-	"strconv"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/go-sql-driver/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -38,16 +35,10 @@ const (
 
 // SQL queries and parameters.
 const (
-	versionQuery = `SELECT @@version`
-
 	// System variable params formatting.
 	// See: https://github.com/go-sql-driver/mysql#system-variables
 	sessionSettingsParam = `log_slow_filter=%27tmp_table_on_disk,filesort_on_disk%27`
 	timeoutParam         = `lock_wait_timeout=%d`
-)
-
-var (
-	versionRE = regexp.MustCompile(`^\d+\.\d+`)
 )
 
 // Tunable flags.
@@ -101,21 +92,35 @@ var _ prometheus.Collector = (*Exporter)(nil)
 // Exporter collects MySQL metrics. It implements prometheus.Collector.
 type Exporter struct {
 	ctx      context.Context
-	logger   log.Logger
+	logger   *slog.Logger
 	dsn      string
 	scrapers []Scraper
-	globalDB *sql.DB
-	target   string
+	instance *instance
+	db       *sql.DB
 }
 
 // New returns a new MySQL exporter for the provided DSN.
-func New(ctx context.Context, globalDB *sql.DB, dsn, target string, scrapers []Scraper, logger log.Logger) *Exporter {
+func New(ctx context.Context, db *sql.DB, dsn string, scrapers []Scraper, logger *slog.Logger) *Exporter {
+	// Setup extra params for the DSN, default to having a lock timeout.
+	dsnParams := []string{fmt.Sprintf(timeoutParam, *exporterLockTimeout)}
+
+	if *slowLogFilter {
+		dsnParams = append(dsnParams, sessionSettingsParam)
+	}
+
+	if strings.Contains(dsn, "?") {
+		dsn = dsn + "&"
+	} else {
+		dsn = dsn + "?"
+	}
+	dsn += strings.Join(dsnParams, "&")
+
 	return &Exporter{
 		ctx:      ctx,
 		logger:   logger,
 		dsn:      dsn,
 		scrapers: scrapers,
-		globalDB: globalDB,
+		db:       db,
 	}
 }
 
@@ -135,26 +140,31 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 // scrape collects metrics from the target, returns an up metric value.
 func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) float64 {
 	var err error
+	var instance *instance
 	scrapeTime := time.Now()
-
-	db := e.globalDB
-	if db == nil {
-		db, err = NewDB(e.dsn, e.target)
-		if err != nil {
-			level.Error(e.logger).Log("msg", "Error opening connection to database", "err", err)
-			return 0.0
+	if e.db != nil {
+		instance, err = newInstance("", e.db)
+	} else {
+		instance, err = newInstance(e.dsn, nil)
+		if err == nil {
+			defer instance.Close()
 		}
-		defer db.Close()
 	}
+	if err != nil {
+		e.logger.Error("Error opening connection to database", "err", err)
+		return 0.0
+	}
+	e.instance = instance
 
-	if err := db.PingContext(ctx); err != nil {
-		level.Error(e.logger).Log("msg", "Error pinging mysqld", "err", err)
+	if err := instance.Ping(); err != nil {
+		e.logger.Error("Error pinging mysqld", "err", err)
 		return 0.0
 	}
 
 	ch <- prometheus.MustNewConstMetric(mysqlScrapeDurationSeconds, prometheus.GaugeValue, time.Since(scrapeTime).Seconds(), "connection")
 
-	version := getMySQLVersion(db, e.logger)
+	version := instance.versionMajorMinor
+
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	for _, scraper := range e.scrapers {
@@ -168,8 +178,8 @@ func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) floa
 			label := "collect." + scraper.Name()
 			scrapeTime := time.Now()
 			collectorSuccess := 1.0
-			if err := scraper.Scrape(ctx, db, ch, log.With(e.logger, "scraper", scraper.Name())); err != nil {
-				level.Error(e.logger).Log("msg", "Error from scraper", "scraper", scraper.Name(), "target", e.getTargetFromDsn(), "err", err)
+			if err := scraper.Scrape(ctx, instance, ch, e.logger.With("scraper", scraper.Name())); err != nil {
+				e.logger.Error("Error from scraper", "scraper", scraper.Name(), "target", e.getTargetFromDsn(), "err", err)
 				collectorSuccess = 0.0
 			}
 			ch <- prometheus.MustNewConstMetric(mysqlScrapeCollectorSuccess, prometheus.GaugeValue, collectorSuccess, label)
@@ -183,26 +193,10 @@ func (e *Exporter) getTargetFromDsn() string {
 	// Get target from DSN.
 	dsnConfig, err := mysql.ParseDSN(e.dsn)
 	if err != nil {
-		level.Error(e.logger).Log("msg", "Error parsing DSN", "err", err)
+		e.logger.Error("Error parsing DSN", "err", err)
 		return ""
 	}
 	return dsnConfig.Addr
-}
-
-func getMySQLVersion(db *sql.DB, logger log.Logger) float64 {
-	var versionStr string
-	var versionNum float64
-	if err := db.QueryRow(versionQuery).Scan(&versionStr); err == nil {
-		versionNum, _ = strconv.ParseFloat(versionRE.FindString(versionStr), 64)
-	} else {
-		level.Debug(logger).Log("msg", "Error querying version", "err", err)
-	}
-	// If we can't match/parse the version, set it some big value that matches all versions.
-	if versionNum == 0 {
-		level.Debug(logger).Log("msg", "Error parsing version string", "version", versionStr)
-		versionNum = 999
-	}
-	return versionNum
 }
 
 func NewDB(dsn string, target string) (*sql.DB, error) {

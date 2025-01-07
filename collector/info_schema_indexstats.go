@@ -4,10 +4,8 @@ package collector
 
 import (
 	"context"
-	"database/sql"
+	"log/slog"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -47,19 +45,19 @@ func (ScrapeIndexStat) Version() float64 {
 }
 
 // Scrape collects data.
-func (ScrapeIndexStat) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
+func (ScrapeIndexStat) Scrape(ctx context.Context, instance *instance, ch chan<- prometheus.Metric, logger *slog.Logger) error {
 	var varName, varVal string
-	err := db.QueryRowContext(ctx, userstatCheckQuery).Scan(&varName, &varVal)
+	err := instance.db.QueryRowContext(ctx, userstatCheckQuery).Scan(&varName, &varVal)
 	if err != nil {
-		level.Debug(logger).Log("Detailed index stats are not available:", err)
+		logger.Debug("Detailed index stats are not available:", err)
 		return nil
 	}
 	if varVal == "OFF" {
-		level.Debug(logger).Log("MySQL @@%s is OFF.", varName)
+		logger.Debug("MySQL @@%s is OFF.", varName)
 		return nil
 	}
 
-	informationSchemaIndexStatisticsRows, err := db.QueryContext(ctx, indexStatQuery)
+	informationSchemaIndexStatisticsRows, err := instance.db.QueryContext(ctx, indexStatQuery)
 	if err != nil {
 		return err
 	}

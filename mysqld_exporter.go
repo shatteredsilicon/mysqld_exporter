@@ -18,7 +18,7 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"fmt"
-	stdlog "log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -29,13 +29,12 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/prometheus/client_golang/prometheus"
+	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/promlog"
-	"github.com/prometheus/common/promlog/flag"
+	"github.com/prometheus/common/promslog"
+	"github.com/prometheus/common/promslog/flag"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
 	"github.com/shatteredsilicon/mysqld_exporter/collector"
@@ -122,10 +121,6 @@ var (
 		"config",
 		"Path of config file",
 	).Default("/opt/ss/ssm-client/mysqld_exporter.conf").String()
-	promlogConfig = &promlog.Config{
-		Level:  &promlog.AllowedLevel{},
-		Format: &promlog.AllowedFormat{},
-	}
 
 	_ = kingpin.Flag("c", "").Hidden().Short('c').Action(convertFlagAction('c')).Strings()
 	_ = kingpin.Flag("w", "").Hidden().Short('w').Action(convertFlagAction('w')).Strings()
@@ -257,7 +252,37 @@ func init() {
 	})
 }
 
-func newHandler(db *sql.DB, scrapers []collector.Scraper, logger log.Logger) http.HandlerFunc {
+func getScrapeTimeoutSeconds(r *http.Request, offset float64) (float64, error) {
+	var timeoutSeconds float64
+	if v := r.Header.Get("X-Prometheus-Scrape-Timeout-Seconds"); v != "" {
+		var err error
+		timeoutSeconds, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse timeout from Prometheus header: %v", err)
+		}
+	}
+	if timeoutSeconds == 0 {
+		return 0, nil
+	}
+	if timeoutSeconds < 0 {
+		return 0, fmt.Errorf("timeout value from Prometheus header is invalid: %f", timeoutSeconds)
+	}
+
+	if offset >= timeoutSeconds {
+		// Ignore timeout offset if it doesn't leave time to scrape.
+		return 0, fmt.Errorf("timeout offset (%f) should be lower than prometheus scrape timeout (%f)", offset, timeoutSeconds)
+	} else {
+		// Subtract timeout offset from timeout.
+		timeoutSeconds -= offset
+	}
+	return timeoutSeconds, nil
+}
+
+func init() {
+	prometheus.MustRegister(versioncollector.NewCollector("mysqld_exporter"))
+}
+
+func newHandler(db *sql.DB, scrapers []collector.Scraper, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var dsn string
 		var err error
@@ -270,10 +295,10 @@ func newHandler(db *sql.DB, scrapers []collector.Scraper, logger log.Logger) htt
 		cfg := c.GetConfig()
 		cfgsection, ok := cfg.Sections["client"]
 		if !ok {
-			level.Error(logger).Log("msg", "Failed to parse section [client] from config file", "err", err)
+			logger.Error("Failed to parse section [client] from config file", "err", err)
 		}
 		if dsn, err = cfgsection.FormDSN(target); err != nil {
-			level.Error(logger).Log("msg", "Failed to form dsn from section [client]", "err", err)
+			logger.Error("Failed to form dsn from section [client]", "err", err)
 		}
 
 		collect := q["collect[]"]
@@ -281,36 +306,24 @@ func newHandler(db *sql.DB, scrapers []collector.Scraper, logger log.Logger) htt
 		// Use request context for cancellation when connection gets closed.
 		ctx := r.Context()
 		// If a timeout is configured via the Prometheus header, add it to the context.
-		if v := r.Header.Get("X-Prometheus-Scrape-Timeout-Seconds"); v != "" {
-			timeoutSeconds, err := strconv.ParseFloat(v, 64)
-			if err != nil {
-				level.Error(logger).Log("msg", "Failed to parse timeout from Prometheus header", "err", err)
-			} else {
-				if *timeoutOffset >= timeoutSeconds {
-					// Ignore timeout offset if it doesn't leave time to scrape.
-					level.Error(logger).Log("msg", "Timeout offset should be lower than prometheus scrape timeout", "offset", *timeoutOffset, "prometheus_scrape_timeout", timeoutSeconds)
-				} else {
-					// Subtract timeout offset from timeout.
-					timeoutSeconds -= *timeoutOffset
-				}
-				// Create new timeout context with request context as parent.
-				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSeconds*float64(time.Second)))
-				defer cancel()
-				// Overwrite request with timeout context.
-				r = r.WithContext(ctx)
-			}
+		timeoutSeconds, err := getScrapeTimeoutSeconds(r, *timeoutOffset)
+		if err != nil {
+			logger.Error("Error getting timeout from Prometheus header", "err", err)
+		}
+		if timeoutSeconds > 0 {
+			// Create new timeout context with request context as parent.
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSeconds*float64(time.Second)))
+			defer cancel()
+			// Overwrite request with timeout context.
+			r = r.WithContext(ctx)
 		}
 
 		filteredScrapers := filterScrapers(scrapers, collect)
 
 		registry := prometheus.NewRegistry()
 
-		db := db
-		if target != "" {
-			db = nil
-		}
-		registry.MustRegister(collector.New(ctx, db, dsn, target, filteredScrapers, logger))
+		registry.MustRegister(collector.New(ctx, db, dsn, filteredScrapers, logger))
 
 		gatherers := prometheus.Gatherers{
 			prometheus.DefaultGatherer,
@@ -322,9 +335,10 @@ func newHandler(db *sql.DB, scrapers []collector.Scraper, logger log.Logger) htt
 	}
 }
 
-func reloadMySqlConfig(logger log.Logger) error {
+func reloadMySqlConfig(logger *slog.Logger) error {
 	if cfg.Exporter.DSN != nil && *cfg.Exporter.DSN != "" { // DSN has higher priority
 		if err := c.ReloadConfigFromDSN(*cfg.Exporter.DSN, logger); err != nil {
+			logger.Error("failed to parse dsn", "dsn", *cfg.Exporter.DSN, "err", err)
 			return err
 		}
 	} else {
@@ -332,6 +346,7 @@ func reloadMySqlConfig(logger log.Logger) error {
 			return err
 		}
 	}
+
 	if *exporterGlobalConnPool {
 		dsn, err := c.GetConfig().Sections["client"].FormDSN("")
 		if err != nil {
@@ -453,11 +468,6 @@ func convertFlagAction(short rune) func(ctx *kingpin.ParseContext) error {
 }
 
 func init() {
-	kingpin.Flag(flag.LevelFlagName, flag.LevelFlagHelp).
-		Default("info").SetValue(promlogConfig.Level)
-	kingpin.Flag(flag.FormatFlagName, flag.FormatFlagHelp).
-		Default("logfmt").SetValue(promlogConfig.Format)
-
 	kingpin.CommandLine.PreAction(setByUserFlagAction())
 }
 
@@ -485,13 +495,16 @@ func main() {
 	}
 
 	// Parse flags.
+	promslogConfig := &promslog.Config{}
+	flag.AddFlags(kingpin.CommandLine, promslogConfig)
 	kingpin.Version(version.Print("mysqld_exporter"))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
-	logger := promlog.New(promlogConfig)
+	logger := promslog.New(promslogConfig)
 
 	if err := ini.MapTo(&cfg, *configPath); err != nil {
-		stdlog.Fatalf(fmt.Sprintf("Load config file %s failed: %s\n", *configPath, err.Error()))
+		logger.Error(fmt.Sprintf("Load config file %s failed: %s\n", *configPath, err.Error()))
+		os.Exit(1)
 	}
 
 	if cfg.Config.MyCnf == nil || *cfg.Config.MyCnf == "" {
@@ -514,12 +527,12 @@ func main() {
 	// if it's not set
 	overrideFlags()
 
-	level.Info(logger).Log("msg", "Starting mysqld_exporter", "version", version.Info())
-	level.Info(logger).Log("msg", "Build context", "build_context", version.BuildContext())
+	logger.Info("Starting mysqld_exporter", "version", version.Info())
+	logger.Info("Build context", "build_context", version.BuildContext())
 
 	var err error
 	if err = reloadMySqlConfig(logger); err != nil {
-		level.Info(logger).Log("msg", "Error parsing host config", "file", *configMycnf, "err", err)
+		logger.Info("Error parsing host config", "file", *configMycnf, "err", err)
 		os.Exit(1)
 	}
 
@@ -530,7 +543,7 @@ func main() {
 	enabledLrScrapers := []collector.Scraper{}
 	for scraper, enabled := range scraperFlags {
 		if *enabled || *collectAll {
-			level.Info(logger).Log("msg", "Scraper enabled", "scraper", scraper.Name())
+			logger.Info("Scraper enabled", "scraper", scraper.Name())
 			enabledScrapers = append(enabledScrapers, scraper)
 			if _, ok := scrapersHr[scraper]; ok {
 				enabledHrScrapers = append(enabledHrScrapers, scraper)
@@ -561,7 +574,7 @@ func main() {
 		}
 		landingPage, err := web.NewLandingPage(landingConfig)
 		if err != nil {
-			level.Error(logger).Log("err", err)
+			logger.Error("Error creating landing page", "err", err)
 			os.Exit(1)
 		}
 		http.Handle("/", landingPage)
@@ -579,7 +592,7 @@ func main() {
 	http.HandleFunc("/probe", handleProbe(db, enabledScrapers, logger))
 	http.HandleFunc("/-/reload", func(w http.ResponseWriter, r *http.Request) {
 		if err = reloadMySqlConfig(logger); err != nil {
-			level.Warn(logger).Log("msg", "Error reloading host config", "file", *configMycnf, "error", err)
+			logger.Warn("Error reloading host config", "file", *configMycnf, "error", err)
 			return
 		}
 		_, _ = w.Write([]byte(`ok`))
@@ -589,11 +602,11 @@ func main() {
 	if *webAuthFile != "" {
 		authConfigBytes, err := os.ReadFile(*webAuthFile)
 		if err != nil {
-			level.Error(logger).Log("err", err)
+			logger.Error("err", err)
 			os.Exit(1)
 		}
 		if err := yaml.Unmarshal(authConfigBytes, &authC); err != nil {
-			level.Error(logger).Log("err", err)
+			logger.Error("err", err)
 			os.Exit(1)
 		}
 	}
@@ -602,13 +615,13 @@ func main() {
 	tlsMaxVer := (web.TLSVersion)(tls.VersionTLS13)
 	if tlsMinVersion != nil && *tlsMinVersion != "" {
 		if err := yaml.Unmarshal([]byte(*tlsMinVersion), &tlsMinVer); err != nil {
-			level.Error(logger).Log("err", fmt.Errorf("Unsupported tls minimum version: %s", *tlsMinVersion))
+			logger.Error("err", fmt.Errorf("Unsupported tls minimum version: %s", *tlsMinVersion))
 			os.Exit(1)
 		}
 	}
 	if tlsMaxVersion != nil && *tlsMaxVersion != "" {
 		if err := yaml.Unmarshal([]byte(*tlsMaxVersion), &tlsMaxVer); err != nil {
-			level.Error(logger).Log("err", fmt.Errorf("Unsupported tls maximum version: %s", *tlsMaxVersion))
+			logger.Error("err", fmt.Errorf("Unsupported tls maximum version: %s", *tlsMaxVersion))
 			os.Exit(1)
 		}
 	}
@@ -625,7 +638,7 @@ func main() {
 				}
 			}
 			if cipherSuite == nil {
-				level.Error(logger).Log("err", fmt.Errorf("Unsupported cipher suite: %s", tlsCipherSuite))
+				logger.Error("err", fmt.Errorf("Unsupported cipher suite: %s", tlsCipherSuite))
 				os.Exit(1)
 			}
 			cipherSuites = append(cipherSuites, web.Cipher(cipherSuite.ID))
@@ -642,7 +655,7 @@ func main() {
 	if authC.ServerUser != "" {
 		hashedPsw, err := bcrypt.GenerateFromPassword([]byte(authC.ServerPassword), 0)
 		if err != nil {
-			level.Error(logger).Log("err", err)
+			logger.Error("err", err)
 			os.Exit(1)
 		}
 		prometheusWebConfig.Users = map[string]string{
@@ -655,16 +668,16 @@ func main() {
 	}
 
 	if *webConfigFile == "" {
-		level.Error(logger).Log("Use web.config.file flag/config to tell the location of prometheus web file")
+		logger.Error("Use web.config.file flag/config to tell the location of prometheus web file")
 		os.Exit(1)
 	}
 	webConfigBytes, err := yaml.Marshal(prometheusWebConfig)
 	if err != nil {
-		level.Error(logger).Log("err", err)
+		logger.Error("err", err)
 		os.Exit(1)
 	}
 	if err = os.WriteFile(*webConfigFile, webConfigBytes, 0600); err != nil {
-		level.Error(logger).Log("err", err)
+		logger.Error("err", err)
 		os.Exit(1)
 	}
 
@@ -675,7 +688,7 @@ func main() {
 		WebConfigFile:      webConfigFile,
 	}
 	if err := web.ListenAndServe(srv, toolkitFlags, logger); err != nil {
-		level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
+		logger.Error("Error starting HTTP server", "err", err)
 		os.Exit(1)
 	}
 }
