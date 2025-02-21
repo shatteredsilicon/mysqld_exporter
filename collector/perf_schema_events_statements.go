@@ -18,6 +18,7 @@ package collector
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 
 	"github.com/blang/semver/v4"
@@ -249,6 +250,13 @@ func (ScrapePerfEventsStatements) Scrape(ctx context.Context, instance *instance
 	if mysqlVersion8028 {
 		perfQuery = perfEventsStatementsQueryMySQL
 	}
+
+	perfQuery = fmt.Sprintf(
+		perfQuery,
+		*perfEventsStatementsDigestTextLimit,
+		*perfEventsStatementsTimeLimit,
+		*perfEventsStatementsLimit,
+	)
 
 	db := instance.getDB()
 	// Timers here are returned in picoseconds.
