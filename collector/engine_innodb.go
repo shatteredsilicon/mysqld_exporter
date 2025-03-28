@@ -33,6 +33,13 @@ const (
 	engineInnodbStatusQuery = `SHOW ENGINE INNODB STATUS`
 )
 
+var (
+	// 0 queries inside InnoDB, 0 queries in queue
+	// 0 read views open inside InnoDB
+	rQueries = regexp.MustCompile(`(\d+) queries inside InnoDB, (\d+) queries in queue`)
+	rViews   = regexp.MustCompile(`(\d+) read views open inside InnoDB`)
+)
+
 // ScrapeEngineInnodbStatus scrapes from `SHOW ENGINE INNODB STATUS`.
 type ScrapeEngineInnodbStatus struct{}
 
@@ -68,10 +75,6 @@ func (ScrapeEngineInnodbStatus) Scrape(ctx context.Context, instance *instance, 
 		}
 	}
 
-	// 0 queries inside InnoDB, 0 queries in queue
-	// 0 read views open inside InnoDB
-	rQueries, _ := regexp.Compile(`(\d+) queries inside InnoDB, (\d+) queries in queue`)
-	rViews, _ := regexp.Compile(`(\d+) read views open inside InnoDB`)
 	aioPendingRWs, _ := regexp.Compile(`^Pending normal aio reads:\s?(\d+)?\s(\[\d+(?:, \d+)*\])?\s?, aio writes:\s?(\d+)?\s?(\[\d+(?:, \d+)*\])?`)
 	pendingRWs, _ := regexp.Compile(`^(\d+) pending reads, (\d+) pending writes`)
 	pendingLCWs, _ := regexp.Compile(`^(\d+) pending log (?:flushes|writes), (\d+) pending chkp writes`)
