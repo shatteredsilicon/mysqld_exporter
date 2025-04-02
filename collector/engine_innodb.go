@@ -75,6 +75,7 @@ func (ScrapeEngineInnodbStatus) Scrape(ctx context.Context, instance *instance, 
 	aioPendingRWs, _ := regexp.Compile(`^Pending normal aio reads:\s?(\d+)?\s(\[\d+(?:, \d+)*\])?\s?, aio writes:\s?(\d+)?\s?(\[\d+(?:, \d+)*\])?`)
 	pendingRWs, _ := regexp.Compile(`^(\d+) pending reads, (\d+) pending writes`)
 	pendingLCWs, _ := regexp.Compile(`^(\d+) pending log (?:flushes|writes), (\d+) pending chkp writes`)
+	trxIDCounterRe, _ := regexp.Compile(`^Trx id counter (\d+)`)
 
 	pendingReads, pendingWrites := 0, 0
 	for _, line := range strings.Split(statusCol, "\n") {
@@ -141,6 +142,14 @@ func (ScrapeEngineInnodbStatus) Scrape(ctx context.Context, instance *instance, 
 				newDesc(innodb, "pending_checkpoint_writes", "InnoDB pending checkpoint writes."),
 				prometheus.GaugeValue,
 				float64(pendingChkpWrites),
+			)
+		} else if data := trxIDCounterRe.FindStringSubmatch(line); data != nil {
+			trxIDCounter, _ := strconv.ParseInt(data[1], 10, 64)
+
+			ch <- prometheus.MustNewConstMetric(
+				newDesc(innodb, "trx_id_counter_total", "InnoDB transaction ID counter."),
+				prometheus.CounterValue,
+				float64(trxIDCounter),
 			)
 		}
 	}
