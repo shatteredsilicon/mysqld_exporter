@@ -15,7 +15,6 @@ package collector
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -51,15 +50,15 @@ var (
 		"exporter.log_slow_filter",
 		"Add a log_slow_filter to avoid slow query logging of scrapes. NOTE: Not supported by Oracle MySQL.",
 	).Default("false").Bool()
-	exporterMaxOpenConns = kingpin.Flag(
+	_ = kingpin.Flag(
 		"exporter.max-open-conns",
 		"Maximum number of open connections to the database. https://golang.org/pkg/database/sql/#DB.SetMaxOpenConns",
 	).Int()
-	exporterMaxIdleConns = kingpin.Flag(
+	_ = kingpin.Flag(
 		"exporter.max-idle-conns",
 		"Maximum number of connections in the idle connection pool. https://golang.org/pkg/database/sql/#DB.SetMaxIdleConns",
 	).Int()
-	exporterConnMaxLifetime = kingpin.Flag(
+	_ = kingpin.Flag(
 		"exporter.conn-max-lifetime",
 		"Maximum amount of time a connection may be reused. https://golang.org/pkg/database/sql/#DB.SetConnMaxLifetime",
 	).Duration()
@@ -96,11 +95,10 @@ type Exporter struct {
 	dsn      string
 	scrapers []Scraper
 	instance *instance
-	db       *sql.DB
 }
 
 // New returns a new MySQL exporter for the provided DSN.
-func New(ctx context.Context, db *sql.DB, dsn string, scrapers []Scraper, logger *slog.Logger) *Exporter {
+func New(ctx context.Context, dsn string, scrapers []Scraper, logger *slog.Logger) *Exporter {
 	// Setup extra params for the DSN, default to having a lock timeout.
 	dsnParams := []string{fmt.Sprintf(timeoutParam, *exporterLockTimeout)}
 
@@ -120,7 +118,6 @@ func New(ctx context.Context, db *sql.DB, dsn string, scrapers []Scraper, logger
 		logger:   logger,
 		dsn:      dsn,
 		scrapers: scrapers,
-		db:       db,
 	}
 }
 
@@ -140,20 +137,13 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 // scrape collects metrics from the target, returns an up metric value.
 func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) float64 {
 	var err error
-	var instance *instance
 	scrapeTime := time.Now()
-	if e.db != nil {
-		instance, err = newInstance("", e.db)
-	} else {
-		instance, err = newInstance(e.dsn, nil)
-		if err == nil {
-			defer instance.Close()
-		}
-	}
+	instance, err := newInstance(e.dsn)
 	if err != nil {
 		e.logger.Error("Error opening connection to database", "err", err)
 		return 0.0
 	}
+	defer instance.Close()
 	e.instance = instance
 
 	if err := instance.Ping(); err != nil {
@@ -197,38 +187,4 @@ func (e *Exporter) getTargetFromDsn() string {
 		return ""
 	}
 	return dsnConfig.Addr
-}
-
-func NewDB(dsn string, target string) (*sql.DB, error) {
-	// Setup extra params for the DSN, default to having a lock timeout.
-	dsnParams := []string{fmt.Sprintf(timeoutParam, *exporterLockTimeout)}
-
-	if *slowLogFilter {
-		dsnParams = append(dsnParams, sessionSettingsParam)
-	}
-
-	if strings.Contains(dsn, "?") {
-		dsn = dsn + "&"
-	} else {
-		dsn = dsn + "?"
-	}
-	dsn += strings.Join(dsnParams, "&")
-
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		return nil, err
-	}
-
-	if target == "" {
-		db.SetMaxOpenConns(*exporterMaxOpenConns)
-		db.SetMaxIdleConns(*exporterMaxIdleConns)
-		db.SetConnMaxLifetime(*exporterConnMaxLifetime)
-	} else {
-		// By design exporter should use maximum one connection per request.
-		db.SetMaxOpenConns(1)
-		db.SetMaxIdleConns(1)
-		// Set max lifetime for a connection.
-		db.SetConnMaxLifetime(1 * time.Minute)
-	}
-	return db, nil
 }

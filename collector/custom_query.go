@@ -152,7 +152,7 @@ func addQueries(content []byte, exporterMap map[string]MetricMapNamespace, custo
 	// Stores the loaded map representation.
 	metricMaps := make(map[string]map[string]ColumnMapping)
 	for metric, specs := range extra {
-		logger.Debug("New user metric namespace from YAML:", metric)
+		logger.Debug("New user metric namespace from YAML:", metric, specs)
 		specMap, ok := specs.(map[interface{}]interface{})
 		if !ok {
 			return fmt.Errorf("incorrect yaml format for %+v", specs)
