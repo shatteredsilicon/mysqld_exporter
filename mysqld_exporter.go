@@ -16,7 +16,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net"
@@ -109,7 +108,7 @@ var (
 		"tls.insecure-skip-verify",
 		"Ignore certificate and server verification when using a tls connection.",
 	).Bool()
-	exporterGlobalConnPool = kingpin.Flag(
+	_ = kingpin.Flag(
 		"exporter.global-conn-pool",
 		"Use global connection pool instead of creating new pool for each http request.",
 	).Bool()
@@ -130,7 +129,6 @@ var (
 	c = mysqldConfig.MySqlConfigHandler{
 		Config: &mysqldConfig.Config{},
 	}
-	db *sql.DB
 )
 
 // scrapers lists all possible collection methods and if they should be enabled by default.
@@ -282,7 +280,7 @@ func init() {
 	prometheus.MustRegister(versioncollector.NewCollector("mysqld_exporter"))
 }
 
-func newHandler(db *sql.DB, scrapers []collector.Scraper, logger *slog.Logger) http.HandlerFunc {
+func newHandler(scrapers []collector.Scraper, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var dsn string
 		var err error
@@ -323,7 +321,7 @@ func newHandler(db *sql.DB, scrapers []collector.Scraper, logger *slog.Logger) h
 
 		registry := prometheus.NewRegistry()
 
-		registry.MustRegister(collector.New(ctx, db, dsn, filteredScrapers, logger))
+		registry.MustRegister(collector.New(ctx, dsn, filteredScrapers, logger))
 
 		gatherers := prometheus.Gatherers{
 			prometheus.DefaultGatherer,
@@ -345,26 +343,6 @@ func reloadMySqlConfig(logger *slog.Logger) error {
 		if err := c.ReloadConfig(*configMycnf, *mysqldAddress, *mysqldUser, *tlsInsecureSkipVerify, logger); err != nil {
 			return err
 		}
-	}
-
-	if *exporterGlobalConnPool {
-		dsn, err := c.GetConfig().Sections["client"].FormDSN("")
-		if err != nil {
-			return err
-		}
-
-		newDB, err := collector.NewDB(dsn, "")
-		if err != nil {
-			return err
-		}
-
-		if db != nil {
-			if err = db.Close(); err != nil {
-				newDB.Close()
-				return err
-			}
-		}
-		db = newDB
 	}
 
 	return nil
@@ -472,12 +450,6 @@ func init() {
 }
 
 func main() {
-	defer func() {
-		if db != nil {
-			db.Close()
-		}
-	}()
-
 	// Generate ON/OFF flags for all scrapers.
 	scraperFlags := map[collector.Scraper]*bool{}
 	for scraper, enabledByDefault := range scrapers {
@@ -557,7 +529,7 @@ func main() {
 		}
 	}
 
-	handlerFunc := newHandler(db, enabledScrapers, logger)
+	handlerFunc := newHandler(enabledScrapers, logger)
 	http.Handle(*metricsPath, promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, handlerFunc))
 	var extraPathPrefix string
 	if *metricsPath != "/" && *metricsPath != "" {
@@ -582,14 +554,14 @@ func main() {
 		extraPathPrefix = *metricsPath + "-"
 	}
 
-	hrHandlerFunc := newHandler(db, enabledHrScrapers, logger)
+	hrHandlerFunc := newHandler(enabledHrScrapers, logger)
 	http.Handle(extraPathPrefix+"hr", promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, hrHandlerFunc))
-	mrHandlerFunc := newHandler(db, enabledMrScrapers, logger)
+	mrHandlerFunc := newHandler(enabledMrScrapers, logger)
 	http.Handle(extraPathPrefix+"mr", promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, mrHandlerFunc))
-	lrHandlerFunc := newHandler(db, enabledLrScrapers, logger)
+	lrHandlerFunc := newHandler(enabledLrScrapers, logger)
 	http.Handle(extraPathPrefix+"lr", promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, lrHandlerFunc))
 
-	http.HandleFunc("/probe", handleProbe(db, enabledScrapers, logger))
+	http.HandleFunc("/probe", handleProbe(enabledScrapers, logger))
 	http.HandleFunc("/-/reload", func(w http.ResponseWriter, r *http.Request) {
 		if err = reloadMySqlConfig(logger); err != nil {
 			logger.Warn("Error reloading host config", "file", *configMycnf, "error", err)

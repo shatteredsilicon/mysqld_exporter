@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -26,7 +25,7 @@ import (
 	"github.com/shatteredsilicon/mysqld_exporter/collector"
 )
 
-func handleProbe(db *sql.DB, scrapers []collector.Scraper, logger *slog.Logger) http.HandlerFunc {
+func handleProbe(scrapers []collector.Scraper, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		params := r.URL.Query()
@@ -73,7 +72,7 @@ func handleProbe(db *sql.DB, scrapers []collector.Scraper, logger *slog.Logger) 
 		filteredScrapers := filterScrapers(scrapers, collectParams)
 
 		registry := prometheus.NewRegistry()
-		registry.MustRegister(collector.New(ctx, db, dsn, filteredScrapers, logger))
+		registry.MustRegister(collector.New(ctx, dsn, filteredScrapers, logger))
 
 		h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 		h.ServeHTTP(w, r)

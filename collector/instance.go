@@ -35,17 +35,14 @@ type instance struct {
 	versionMajorMinor float64
 }
 
-func newInstance(dsn string, db *sql.DB) (*instance, error) {
+func newInstance(dsn string) (*instance, error) {
 	i := &instance{}
-	if db == nil {
-		var err error
-		db, err = sql.Open("mysql", dsn)
-		if err != nil {
-			return nil, err
-		}
-		db.SetMaxOpenConns(1)
-		db.SetMaxIdleConns(1)
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, err
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 	i.db = db
 
 	version, versionString, err := queryVersion(db)

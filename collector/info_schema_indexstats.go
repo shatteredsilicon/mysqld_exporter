@@ -4,6 +4,7 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -53,7 +54,7 @@ func (ScrapeIndexStat) Scrape(ctx context.Context, instance *instance, ch chan<-
 		return nil
 	}
 	if varVal == "OFF" {
-		logger.Debug("MySQL @@%s is OFF.", varName)
+		logger.Debug(fmt.Sprintf("MySQL @@%s is OFF.", varName))
 		return nil
 	}
 

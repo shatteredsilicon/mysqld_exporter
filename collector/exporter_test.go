@@ -32,7 +32,6 @@ func TestExporter(t *testing.T) {
 
 	exporter := New(
 		context.Background(),
-		nil,
 		dsn,
 		[]Scraper{
 			ScrapeGlobalStatus{},
@@ -51,7 +50,7 @@ func TestExporter(t *testing.T) {
 		}
 	})
 
-	convey.Convey("Metrics collection", t, func(c convey.C) {
+	convey.Convey("Metrics collection", t, func() {
 		ch := make(chan prometheus.Metric)
 		go func() {
 			exporter.Collect(ch)
@@ -61,7 +60,7 @@ func TestExporter(t *testing.T) {
 		for m := range ch {
 			got := readMetric(m)
 			if got.labels[model.MetricNameLabel] == "mysql_up" {
-				c.So(got.value, convey.ShouldEqual, 1)
+				convey.So(got.value, convey.ShouldEqual, 1)
 			}
 		}
 	})

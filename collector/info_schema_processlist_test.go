@@ -42,7 +42,7 @@ func TestScrapeProcesslist(t *testing.T) {
 	defer db.Close()
 	inst := &instance{db: db}
 
-	query := fmt.Sprintf(infoSchemaProcesslistQuery, 0)
+	query := fmt.Sprintf(infoSchemaProcesslistQuery, "", 0)
 	columns := []string{"user", "host", "command", "state", "processes", "seconds"}
 	rows := sqlmock.NewRows(columns).
 		AddRow("manager", "10.0.7.234", "Sleep", "", 10, 87).
