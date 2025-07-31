@@ -48,18 +48,6 @@ var (
 
 // Tunable flags.
 var (
-	exporterLockTimeout = kingpin.Flag(
-		"exporter.lock_wait_timeout",
-		"Set a lock_wait_timeout (in seconds) on the connection to avoid long metadata locking.",
-	).Default("2").Int()
-	enableExporterLockTimeout = kingpin.Flag(
-		"exporter.enable_lock_wait_timeout",
-		"Enable the lock_wait_timeout MySQL connection parameter.",
-	).Default("true").Bool()
-	slowLogFilter = kingpin.Flag(
-		"exporter.log_slow_filter",
-		"Add a log_slow_filter to avoid slow query logging of scrapes. NOTE: Not supported by Oracle MySQL.",
-	).Default("false").Bool()
 	_ = kingpin.Flag(
 		"exporter.max-open-conns",
 		"Maximum number of open connections to the database. https://golang.org/pkg/database/sql/#DB.SetMaxOpenConns",
@@ -113,19 +101,53 @@ type Exporter struct {
 	dsn      string
 	scrapers []Scraper
 	instance *instance
+
+	enableLockWaitTimeout bool
+	lockWaitTimeout       int
+	slowLogFilter         bool
+}
+
+type ExporterOpt func(*Exporter)
+
+func EnableLockWaitTimeout(b bool) ExporterOpt {
+	return func(e *Exporter) {
+		e.enableLockWaitTimeout = b
+	}
+}
+
+func SetLockWaitTimeout(timeout int) ExporterOpt {
+	return func(e *Exporter) {
+		e.lockWaitTimeout = timeout
+	}
+}
+
+func SetSlowLogFilter(b bool) ExporterOpt {
+	return func(e *Exporter) {
+		e.slowLogFilter = b
+	}
 }
 
 // New returns a new MySQL exporter for the provided DSN.
-func New(ctx context.Context, dsn string, scrapers []Scraper, logger *slog.Logger) *Exporter {
+func New(ctx context.Context, dsn string, scrapers []Scraper, logger *slog.Logger, opts ...ExporterOpt) *Exporter {
+	e := &Exporter{
+		ctx:      ctx,
+		logger:   logger,
+		scrapers: scrapers,
+	}
+
+	for _, opt := range opts {
+		opt(e)
+	}
+
 	// Setup extra params for the DSN
 	dsnParams := []string{}
 
 	// Only set lock_wait_timeout if it is enabled
-	if *enableExporterLockTimeout {
-		dsnParams = append(dsnParams, fmt.Sprintf(timeoutParam, *exporterLockTimeout))
+	if e.enableLockWaitTimeout {
+		dsnParams = append(dsnParams, fmt.Sprintf(timeoutParam, e.lockWaitTimeout))
 	}
 
-	if *slowLogFilter {
+	if e.slowLogFilter {
 		dsnParams = append(dsnParams, sessionSettingsParam)
 	}
 
@@ -136,12 +158,9 @@ func New(ctx context.Context, dsn string, scrapers []Scraper, logger *slog.Logge
 	}
 	dsn += strings.Join(dsnParams, "&")
 
-	return &Exporter{
-		ctx:      ctx,
-		logger:   logger,
-		dsn:      dsn,
-		scrapers: scrapers,
-	}
+	e.dsn = dsn
+
+	return e
 }
 
 // Describe implements prometheus.Collector.

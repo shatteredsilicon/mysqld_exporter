@@ -41,6 +41,7 @@ import (
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v2"
 
+	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	mysqldConfig "github.com/shatteredsilicon/mysqld_exporter/config"
 )
 
@@ -125,7 +126,20 @@ var (
 	_ = kingpin.Flag("e", "").Hidden().Short('e').Action(convertFlagAction('e')).Strings()
 	_ = kingpin.Flag("t", "").Hidden().Short('t').Action(convertFlagAction('t')).Strings()
 
-	c = mysqldConfig.MySqlConfigHandler{
+	exporterLockTimeout = kingpin.Flag(
+		"exporter.lock_wait_timeout",
+		"Set a lock_wait_timeout (in seconds) on the connection to avoid long metadata locking.",
+	).Default("2").Int()
+	enableExporterLockTimeout = kingpin.Flag(
+		"exporter.enable_lock_wait_timeout",
+		"Enable the lock_wait_timeout MySQL connection parameter.",
+	).Default("true").Bool()
+	slowLogFilter = kingpin.Flag(
+		"exporter.log_slow_filter",
+		"Add a log_slow_filter to avoid slow query logging of scrapes. NOTE: Not supported by Oracle MySQL.",
+	).Default("false").Bool()
+	toolkitFlags = webflag.AddFlags(kingpin.CommandLine, ":9104")
+	c            = mysqldConfig.MySqlConfigHandler{
 		Config: &mysqldConfig.Config{},
 	}
 )
@@ -326,7 +340,11 @@ func newHandler(scrapers []collector.Scraper, logger *slog.Logger) http.HandlerF
 
 		registry := prometheus.NewRegistry()
 
-		registry.MustRegister(collector.New(ctx, dsn, filteredScrapers, logger))
+		registry.MustRegister(collector.New(ctx, dsn, filteredScrapers, logger,
+			collector.EnableLockWaitTimeout(*enableExporterLockTimeout),
+			collector.SetLockWaitTimeout(*exporterLockTimeout),
+			collector.SetSlowLogFilter(*slowLogFilter),
+		))
 
 		gatherers := prometheus.Gatherers{
 			prometheus.DefaultGatherer,
