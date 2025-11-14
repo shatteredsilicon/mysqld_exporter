@@ -170,6 +170,7 @@ var scrapers = map[collector.Scraper]bool{
 	collector.ScrapeReplicaHost{}:                         false,
 	collector.ScrapeCustomQuery{}:                         true,
 	collector.ScrapeIndexStat{}:                           false,
+	collector.ScrapeInnoDBTableStats{}:                    true,
 }
 
 var scrapersHr = map[collector.Scraper]struct{}{
@@ -206,6 +207,7 @@ var scrapersLr = map[collector.Scraper]struct{}{
 	collector.ScrapeEngineTokudbStatus{}:          {},
 	collector.ScrapeHeartbeat{}:                   {},
 	collector.ScrapeCustomQuery{}:                 {},
+	collector.ScrapeInnoDBTableStats{}:            {},
 }
 
 func filterScrapers(scrapers []collector.Scraper, collectParams []string) []collector.Scraper {
@@ -676,34 +678,35 @@ type config struct {
 }
 
 type collectConfig struct {
-	All                  bool `ini:"all"`
-	GlobalStatus         bool `ini:"global_status"`
-	GlobalVariables      bool `ini:"global_variables"`
-	SlaveStatus          bool `ini:"slave_status"`
-	ProcessList          bool `ini:"info_schema.processlist"`
-	TableSchema          bool `ini:"info_schema.tables"`
-	InnodbTableSpaces    bool `ini:"info_schema.innodb_tablespaces"`
-	InnodbMetrics        bool `ini:"info_schema.innodb_metrics"`
-	AutoIncrementColumns bool `ini:"auto_increment.columns"`
-	BinlogSize           bool `ini:"binlog_size"`
-	PerfTableIOWaits     bool `ini:"perf_schema.tableiowaits"`
-	PerfIndexIOWaits     bool `ini:"perf_schema.indexiowaits"`
-	PerfTableLockWaits   bool `ini:"perf_schema.tablelocks"`
-	PerfEventsStatements bool `ini:"perf_schema.eventsstatements"`
-	PerfEventsWaits      bool `ini:"perf_schema.eventswaits"`
-	PerfFileEvents       bool `ini:"perf_schema.file_events"`
-	PerfFileInstances    bool `ini:"perf_schema.file_instances"`
-	UserStat             bool `ini:"info_schema.userstats"`
-	ClientStat           bool `ini:"info_schema.clientstats"`
-	TableStat            bool `ini:"info_schema.tablestats"`
-	IndexStat            bool `ini:"info_schema.indexstats"`
-	QueryResponseTime    bool `ini:"info_schema.query_response_time"`
-	EngineTokudbStatus   bool `ini:"engine_tokudb_status"`
-	EngineInnodbStatus   bool `ini:"engine_innodb_status"`
-	Heartbeat            bool `ini:"heartbeat"`
-	InnodbCmp            bool `ini:"info_schema.innodb_cmp"`
-	InnodbCmpMem         bool `ini:"info_schema.innodb_cmpmem"`
-	CustomQuery          bool `ini:"custom_query"`
+	All                  bool  `ini:"all"`
+	GlobalStatus         bool  `ini:"global_status"`
+	GlobalVariables      bool  `ini:"global_variables"`
+	SlaveStatus          bool  `ini:"slave_status"`
+	ProcessList          bool  `ini:"info_schema.processlist"`
+	TableSchema          bool  `ini:"info_schema.tables"`
+	InnodbTableSpaces    bool  `ini:"info_schema.innodb_tablespaces"`
+	InnodbMetrics        bool  `ini:"info_schema.innodb_metrics"`
+	AutoIncrementColumns bool  `ini:"auto_increment.columns"`
+	BinlogSize           bool  `ini:"binlog_size"`
+	PerfTableIOWaits     bool  `ini:"perf_schema.tableiowaits"`
+	PerfIndexIOWaits     bool  `ini:"perf_schema.indexiowaits"`
+	PerfTableLockWaits   bool  `ini:"perf_schema.tablelocks"`
+	PerfEventsStatements bool  `ini:"perf_schema.eventsstatements"`
+	PerfEventsWaits      bool  `ini:"perf_schema.eventswaits"`
+	PerfFileEvents       bool  `ini:"perf_schema.file_events"`
+	PerfFileInstances    bool  `ini:"perf_schema.file_instances"`
+	UserStat             bool  `ini:"info_schema.userstats"`
+	ClientStat           bool  `ini:"info_schema.clientstats"`
+	TableStat            bool  `ini:"info_schema.tablestats"`
+	IndexStat            bool  `ini:"info_schema.indexstats"`
+	QueryResponseTime    bool  `ini:"info_schema.query_response_time"`
+	EngineTokudbStatus   bool  `ini:"engine_tokudb_status"`
+	EngineInnodbStatus   bool  `ini:"engine_innodb_status"`
+	Heartbeat            bool  `ini:"heartbeat"`
+	InnodbCmp            bool  `ini:"info_schema.innodb_cmp"`
+	InnodbCmpMem         bool  `ini:"info_schema.innodb_cmpmem"`
+	CustomQuery          bool  `ini:"custom_query"`
+	InnoDBTableStats     *bool `ini:"mysql.innodb_table_stats"`
 
 	collector.HeartbeatConfig              `ini:"collect"`
 	collector.InfoSchemaProcessListConfig  `ini:"collect"`
@@ -863,10 +866,12 @@ func overrideFlags() {
 			case reflect.Bool:
 				kingpinF.Model().Value.Set(strconv.FormatBool(values[i].Bool()))
 			case reflect.Ptr:
-				if values[i].IsNil() {
-					kingpinF.Model().Value.Set("")
-				} else {
-					kingpinF.Model().Value.Set(values[i].Elem().String())
+				if !values[i].IsNil() {
+					if values[i].Elem().Kind() == reflect.Bool {
+						kingpinF.Model().Value.Set(strconv.FormatBool(values[i].Elem().Bool()))
+					} else {
+						kingpinF.Model().Value.Set(values[i].Elem().String())
+					}
 				}
 			default:
 				kingpinF.Model().Value.Set(values[i].String())
