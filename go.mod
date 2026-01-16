@@ -11,7 +11,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.67.4
+	github.com/prometheus/common v0.67.5
 	github.com/prometheus/exporter-toolkit v0.15.1
 	github.com/smartystreets/goconvey v1.8.1
 	golang.org/x/crypto v0.52.0
@@ -44,5 +44,5 @@ require (
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )
