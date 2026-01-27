@@ -100,10 +100,6 @@ var (
 		"mysqld.address",
 		"Address to use for connecting to MySQL",
 	).Default("localhost:3306").String()
-	mysqldSocket = kingpin.Flag(
-		"mysqld.socket",
-		"Socket file to use for connecting to MySQL (takes precedence over address)",
-	).String()
 	mysqldUser = kingpin.Flag(
 		"mysqld.username",
 		"Username to use for connecting to MySQL",
@@ -367,7 +363,7 @@ func reloadMySqlConfig(iniFile *ini.File, logger *slog.Logger) error {
 			return err
 		}
 	} else {
-		if err := c.ReloadConfig(*configMycnf, *mysqldAddress, *mysqldSocket, *mysqldUser, *tlsInsecureSkipVerify, logger); err != nil {
+		if err := c.ReloadConfig(*configMycnf, *mysqldAddress, *mysqldUser, *tlsInsecureSkipVerify, logger); err != nil {
 			return err
 		}
 	}
