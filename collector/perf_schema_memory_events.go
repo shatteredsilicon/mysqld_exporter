@@ -40,10 +40,6 @@ var (
 	).Default("memory/").String()
 )
 
-type PerfSchemaMemoryEventsConfig struct {
-	RemovePrefix *string `ini:"perf_schema.memory_events.remove_prefix"`
-}
-
 // Metric descriptors.
 var (
 	performanceSchemaMemoryBytesAllocDesc = prometheus.NewDesc(

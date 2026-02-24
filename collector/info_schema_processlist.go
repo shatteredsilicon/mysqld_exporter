@@ -64,12 +64,6 @@ var (
 	).Default("true").Bool()
 )
 
-type InfoSchemaProcessListConfig struct {
-	MinTime         int  `ini:"info_schema.processlist.min_time"`
-	ProcessesByUser bool `ini:"info_schema.processlist.processes_by_user"`
-	ProcessesByHost bool `ini:"info_schema.processlist.processes_by_host"`
-}
-
 // Metric descriptors.
 var (
 	processlistCountDesc = prometheus.NewDesc(

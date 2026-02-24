@@ -46,11 +46,6 @@ var (
 	).Default("/var/lib/mysql/").String()
 )
 
-type PerfSchemaFileInstConfig struct {
-	Filter       *string `ini:"perf_schema.file_instances.filter"`
-	RemovePrefix *string `ini:"perf_schema.file_instances.remove_prefix"`
-}
-
 // Metric descriptors.
 var (
 	performanceSchemaFileInstancesBytesDesc = prometheus.NewDesc(

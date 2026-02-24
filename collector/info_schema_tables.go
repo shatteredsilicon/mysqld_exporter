@@ -62,10 +62,6 @@ var (
 	).Default("*").String()
 )
 
-type InfoSchemaTablesConfig struct {
-	Databases *string `ini:"info_schema.tables.databases"`
-}
-
 // Metric descriptors.
 var (
 	infoSchemaTablesVersionDesc = prometheus.NewDesc(

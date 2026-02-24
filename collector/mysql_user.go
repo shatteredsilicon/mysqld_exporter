@@ -77,10 +77,6 @@ var (
 	).Default("false").Bool()
 )
 
-type MySQLUserConfig struct {
-	UserPrivileges bool `ini:"mysql.user.privileges"`
-}
-
 var (
 	labelNames = []string{"mysql_user", "hostmask"}
 )

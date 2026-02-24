@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -188,6 +187,7 @@ var scrapersMr = map[collector.Scraper]struct{}{
 	collector.ScrapeEngineInnodbStatus{}: {},
 	collector.ScrapeInnodbCmp{}:          {},
 	collector.ScrapeInnodbCmpMem{}:       {},
+	collector.ScrapePerfMemoryEvents{}:   {},
 }
 
 var scrapersLr = map[collector.Scraper]struct{}{
@@ -335,10 +335,10 @@ func newHandler(scrapers []collector.Scraper, logger *slog.Logger) http.HandlerF
 	}
 }
 
-func reloadMySqlConfig(logger *slog.Logger) error {
-	if cfg.Exporter.DSN != nil && *cfg.Exporter.DSN != "" { // DSN has higher priority
-		if err := c.ReloadConfigFromDSN(*cfg.Exporter.DSN, logger); err != nil {
-			logger.Error("failed to parse dsn", "dsn", *cfg.Exporter.DSN, "err", err)
+func reloadMySqlConfig(iniFile *ini.File, logger *slog.Logger) error {
+	if dsn := iniFile.Section("exporter").Key("dsn").String(); dsn != "" { // DSN has higher priority
+		if err := c.ReloadConfigFromDSN(dsn, logger); err != nil {
+			logger.Error("failed to parse dsn", "dsn", dsn, "err", err)
 			return err
 		}
 	} else {
@@ -350,7 +350,6 @@ func reloadMySqlConfig(logger *slog.Logger) error {
 	return nil
 }
 
-var cfg = new(config)
 var setByUserMap = make(map[string]bool)
 
 func setByUserFlagAction() func(ctx *kingpin.ParseContext) error {
@@ -476,17 +475,18 @@ func main() {
 	kingpin.Parse()
 	logger := promslog.New(promslogConfig)
 
-	if err := ini.MapTo(&cfg, *configPath); err != nil {
+	iniFile, err := ini.Load(*configPath)
+	if err != nil {
 		logger.Error(fmt.Sprintf("Load config file %s failed: %s\n", *configPath, err.Error()))
 		os.Exit(1)
 	}
 
-	if cfg.Config.MyCnf == nil || *cfg.Config.MyCnf == "" {
+	if iniFile.Section("config").Key("my-cnf").String() == "" {
 		defaultMyCnf := path.Join(os.Getenv("HOME"), ".my.cnf")
-		cfg.Config.MyCnf = &defaultMyCnf
+		iniFile.Section("config").Key("my-cnf").SetValue(defaultMyCnf)
 	}
 	if dsn := os.Getenv("DATA_SOURCE_NAME"); dsn != "" {
-		cfg.Exporter.DSN = &dsn
+		iniFile.Section("exporter").Key("dsn").SetValue(dsn)
 	}
 
 	if os.Getenv("ON_CONFIGURE") == "1" {
@@ -499,13 +499,12 @@ func main() {
 
 	// override flag value with config value
 	// if it's not set
-	overrideFlags()
+	overrideFlags(iniFile)
 
 	logger.Info("Starting mysqld_exporter", "version", version.Info())
 	logger.Info("Build context", "build_context", version.BuildContext())
 
-	var err error
-	if err = reloadMySqlConfig(logger); err != nil {
+	if err = reloadMySqlConfig(iniFile, logger); err != nil {
 		logger.Info("Error parsing host config", "file", *configMycnf, "err", err)
 		os.Exit(1)
 	}
@@ -565,7 +564,7 @@ func main() {
 
 	http.HandleFunc("/probe", handleProbe(enabledScrapers, logger))
 	http.HandleFunc("/-/reload", func(w http.ResponseWriter, r *http.Request) {
-		if err = reloadMySqlConfig(logger); err != nil {
+		if err = reloadMySqlConfig(iniFile, logger); err != nil {
 			logger.Warn("Error reloading host config", "file", *configMycnf, "error", err)
 			return
 		}
@@ -576,11 +575,11 @@ func main() {
 	if *webAuthFile != "" {
 		authConfigBytes, err := os.ReadFile(*webAuthFile)
 		if err != nil {
-			logger.Error("err", err)
+			logger.Error("Failed to read web auth file", "filepath", *webAuthFile, "err", err)
 			os.Exit(1)
 		}
 		if err := yaml.Unmarshal(authConfigBytes, &authC); err != nil {
-			logger.Error("err", err)
+			logger.Error("Failed to unmarshal web auth file", "err", err)
 			os.Exit(1)
 		}
 	}
@@ -589,13 +588,13 @@ func main() {
 	tlsMaxVer := (web.TLSVersion)(tls.VersionTLS13)
 	if tlsMinVersion != nil && *tlsMinVersion != "" {
 		if err := yaml.Unmarshal([]byte(*tlsMinVersion), &tlsMinVer); err != nil {
-			logger.Error("err", fmt.Errorf("Unsupported tls minimum version: %s", *tlsMinVersion))
+			logger.Error("Unsupported tls minimum version", "version", *tlsMinVersion)
 			os.Exit(1)
 		}
 	}
 	if tlsMaxVersion != nil && *tlsMaxVersion != "" {
 		if err := yaml.Unmarshal([]byte(*tlsMaxVersion), &tlsMaxVer); err != nil {
-			logger.Error("err", fmt.Errorf("Unsupported tls maximum version: %s", *tlsMaxVersion))
+			logger.Error("Unsupported tls maximum version", "version", *tlsMaxVersion)
 			os.Exit(1)
 		}
 	}
@@ -612,7 +611,7 @@ func main() {
 				}
 			}
 			if cipherSuite == nil {
-				logger.Error("err", fmt.Errorf("Unsupported cipher suite: %s", tlsCipherSuite))
+				logger.Error("Unsupported cipher suite", "chiper suite", tlsCipherSuite)
 				os.Exit(1)
 			}
 			cipherSuites = append(cipherSuites, web.Cipher(cipherSuite.ID))
@@ -629,7 +628,7 @@ func main() {
 	if authC.ServerUser != "" {
 		hashedPsw, err := bcrypt.GenerateFromPassword([]byte(authC.ServerPassword), 0)
 		if err != nil {
-			logger.Error("err", err)
+			logger.Error("Failed to generate hashed password", "err", err)
 			os.Exit(1)
 		}
 		prometheusWebConfig.Users = map[string]string{
@@ -647,11 +646,11 @@ func main() {
 	}
 	webConfigBytes, err := yaml.Marshal(prometheusWebConfig)
 	if err != nil {
-		logger.Error("err", err)
+		logger.Error("Failed to marshal prometheus web config", "err", err.Error())
 		os.Exit(1)
 	}
 	if err = os.WriteFile(*webConfigFile, webConfigBytes, 0600); err != nil {
-		logger.Error("err", err)
+		logger.Error("Failed to write prometheus web config file", "file", *webConfigFile, "err", err.Error())
 		os.Exit(1)
 	}
 
@@ -667,131 +666,15 @@ func main() {
 	}
 }
 
-type config struct {
-	TimeoutOffset float64        `ini:"timeout-offset"`
-	Config        configConfig   `ini:"config"`
-	Collect       collectConfig  `ini:"collect"`
-	Web           webConfig      `ini:"web"`
-	Exporter      exporterConfig `ini:"exporter"`
-	TLS           tlsConfig      `ini:"tls"`
-	MySQLD        mysqlD         `ini:"mysqld"`
-}
-
-type collectConfig struct {
-	All                  bool  `ini:"all"`
-	GlobalStatus         bool  `ini:"global_status"`
-	GlobalVariables      bool  `ini:"global_variables"`
-	SlaveStatus          bool  `ini:"slave_status"`
-	ProcessList          bool  `ini:"info_schema.processlist"`
-	TableSchema          bool  `ini:"info_schema.tables"`
-	InnodbTableSpaces    bool  `ini:"info_schema.innodb_tablespaces"`
-	InnodbMetrics        bool  `ini:"info_schema.innodb_metrics"`
-	AutoIncrementColumns bool  `ini:"auto_increment.columns"`
-	BinlogSize           bool  `ini:"binlog_size"`
-	PerfTableIOWaits     bool  `ini:"perf_schema.tableiowaits"`
-	PerfIndexIOWaits     bool  `ini:"perf_schema.indexiowaits"`
-	PerfTableLockWaits   bool  `ini:"perf_schema.tablelocks"`
-	PerfEventsStatements bool  `ini:"perf_schema.eventsstatements"`
-	PerfEventsWaits      bool  `ini:"perf_schema.eventswaits"`
-	PerfFileEvents       bool  `ini:"perf_schema.file_events"`
-	PerfFileInstances    bool  `ini:"perf_schema.file_instances"`
-	UserStat             bool  `ini:"info_schema.userstats"`
-	ClientStat           bool  `ini:"info_schema.clientstats"`
-	TableStat            bool  `ini:"info_schema.tablestats"`
-	IndexStat            bool  `ini:"info_schema.indexstats"`
-	QueryResponseTime    bool  `ini:"info_schema.query_response_time"`
-	EngineTokudbStatus   bool  `ini:"engine_tokudb_status"`
-	EngineInnodbStatus   bool  `ini:"engine_innodb_status"`
-	Heartbeat            bool  `ini:"heartbeat"`
-	InnodbCmp            bool  `ini:"info_schema.innodb_cmp"`
-	InnodbCmpMem         bool  `ini:"info_schema.innodb_cmpmem"`
-	CustomQuery          bool  `ini:"custom_query"`
-	InnoDBTableStats     *bool `ini:"mysql.innodb_table_stats"`
-
-	collector.HeartbeatConfig              `ini:"collect"`
-	collector.InfoSchemaProcessListConfig  `ini:"collect"`
-	collector.InfoSchemaTablesConfig       `ini:"collect"`
-	collector.MySQLUserConfig              `ini:"collect"`
-	collector.PerfSchemaFileInstConfig     `ini:"collect"`
-	collector.PerfSchemaMemoryEventsConfig `ini:"collect"`
-}
-
-type webConfig struct {
-	ListenAddress   *string  `ini:"listen-address"`
-	TelemetryPath   *string  `ini:"telemetry-path"`
-	AuthFile        *string  `ini:"auth-file"`
-	ConfigFile      *string  `ini:"config.file"`
-	SSLCertFile     *string  `ini:"ssl-cert-file"`
-	SSLKeyFile      *string  `ini:"ssl-key-file"`
-	SystemdSocket   bool     `ini:"systemd-socket"`
-	TLSCipherSuites []string `ini:"tls-cipher-suites,omitempty" help:"A list of enabled TLS 1.0–1.2 cipher suites."`
-	TLSMinVersion   *string  `ini:"tls-min-version,omitempty" help:"Minimum TLS version that is acceptable."`
-	TLSMaxVersion   *string  `ini:"tls-max-version,omitempty" help:"Maximum TLS version that is acceptable."`
-}
-
-type exporterConfig struct {
-	LockWaitTimeout int     `ini:"lock_wait_timeout"`
-	LogSlowFilter   bool    `ini:"log_slow_filter"`
-	GlobalConnPool  bool    `ini:"global-conn-pool"`
-	MaxOpenConns    int     `ini:"max-open-conns"`
-	MaxIdleConns    int     `ini:"max-idle-conns"`
-	ConnMaxLifetime *string `ini:"conn-max-lifetime"`
-	DSN             *string `ini:"dsn"`
-}
-
-type configConfig struct {
-	MyCnf *string `ini:"my-cnf"`
-}
-
-type tlsConfig struct {
-	InsecureSkipVerify bool `ini:"insecure-skip-verify"`
-}
-
-type mysqlD struct {
-	Address  string `ini:"address"`
-	Username string `ini:"username"`
-}
-
-func configVisit(visitFn func(string, string, reflect.Value)) {
-	type item struct {
-		value   reflect.Value
-		section string
-	}
-
-	items := []item{
-		{
-			value:   reflect.ValueOf(cfg).Elem(),
-			section: "",
-		},
-	}
-	for i := 0; i < len(items); i++ {
-		for j := 0; j < items[i].value.Type().NumField(); j++ {
-			fieldValue := items[i].value.Field(j)
-			fieldType := items[i].value.Type().Field(j)
-			section := items[i].section
-			key := strings.SplitN(fieldType.Tag.Get("ini"), ",", 2)[0]
-
-			if fieldValue.Kind() == reflect.Struct {
-				if fieldValue.CanAddr() {
-					if section == "" {
-						section = key
-					} else if section != key {
-						section = fmt.Sprintf("%s.%s", section, key)
-					}
-
-					items = append(items, item{
-						value:   fieldValue.Addr().Elem(),
-						section: section,
-					})
-				}
-				continue
-			} else if fieldValue.Kind() == reflect.Ptr && fieldValue.Type().Elem().Kind() == reflect.String && fieldValue.IsNil() {
-				continue
+func configVisit(iniFile *ini.File, visitFn func(string, string, string) error) error {
+	for _, iniSection := range iniFile.Sections() {
+		for _, iniKey := range iniSection.Keys() {
+			if err := visitFn(iniSection.Name(), iniKey.Name(), iniKey.String()); err != nil {
+				return err
 			}
-
-			visitFn(section, key, fieldValue)
 		}
 	}
+	return nil
 }
 
 func configure() error {
@@ -800,11 +683,7 @@ func configure() error {
 		return err
 	}
 
-	if err = iniCfg.MapTo(cfg); err != nil {
-		return err
-	}
-
-	configVisit(func(section, key string, fieldValue reflect.Value) {
+	if err := configVisit(iniCfg, func(section, key string, value string) error {
 		flagKey := fmt.Sprintf("%s.%s", section, key)
 		if section == "" {
 			flagKey = key
@@ -813,16 +692,19 @@ func configure() error {
 		setByUser := setByUserMap[flagKey]
 		kingpinF := kingpin.CommandLine.GetFlag(flagKey)
 		if !setByUser || kingpinF == nil {
-			return
+			return nil
 		}
 
 		// Don't override web.auth-file config
 		if flagKey == webAuthFileFlagName {
-			return
+			return nil
 		}
 
 		iniCfg.Section(section).Key(key).SetValue(kingpinF.Model().Value.String())
-	})
+		return nil
+	}); err != nil {
+		return err
+	}
 
 	if dsn := os.Getenv("DATA_SOURCE_NAME"); dsn != "" {
 		iniCfg.Section("exporter").Key("dsn").SetValue(strconv.Quote(dsn))
@@ -835,8 +717,8 @@ func configure() error {
 	return nil
 }
 
-func overrideFlags() {
-	configVisit(func(section, key string, fieldValue reflect.Value) {
+func overrideFlags(iniFile *ini.File) {
+	configVisit(iniFile, func(section, key string, value string) error {
 		flagKey := fmt.Sprintf("%s.%s", section, key)
 		if section == "" {
 			flagKey = key
@@ -845,38 +727,14 @@ func overrideFlags() {
 		setByUser := setByUserMap[flagKey]
 		kingpinF := kingpin.CommandLine.GetFlag(flagKey)
 		if setByUser || kingpinF == nil {
-			return
+			return nil
 		}
 
-		var values []reflect.Value
-		if fieldValue.Kind() == reflect.Slice {
-			for i := 0; i < fieldValue.Len(); i++ {
-				values = append(values, fieldValue.Index(i))
-			}
-		} else {
-			values = []reflect.Value{fieldValue}
+		if value == "" {
+			return nil
 		}
 
-		for i := range values {
-			switch values[i].Kind() {
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Float32, reflect.Int64:
-				kingpinF.Model().Value.Set(strconv.FormatInt(values[i].Int(), 10))
-			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				kingpinF.Model().Value.Set(strconv.FormatUint(values[i].Uint(), 10))
-			case reflect.Bool:
-				kingpinF.Model().Value.Set(strconv.FormatBool(values[i].Bool()))
-			case reflect.Ptr:
-				if !values[i].IsNil() {
-					if values[i].Elem().Kind() == reflect.Bool {
-						kingpinF.Model().Value.Set(strconv.FormatBool(values[i].Elem().Bool()))
-					} else {
-						kingpinF.Model().Value.Set(values[i].Elem().String())
-					}
-				}
-			default:
-				kingpinF.Model().Value.Set(values[i].String())
-			}
-		}
+		return kingpinF.Model().Value.Set(value)
 	})
 }
 
