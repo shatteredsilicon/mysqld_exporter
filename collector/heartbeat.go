@@ -51,12 +51,6 @@ var (
 	).Bool()
 )
 
-type HeartbeatConfig struct {
-	Database *string `ini:"heartbeat.database"`
-	Table    *string `ini:"heartbeat.table"`
-	UTC      bool    `ini:"heartbeat.utc"`
-}
-
 // Metric descriptors.
 var (
 	HeartbeatStoredDesc = prometheus.NewDesc(
