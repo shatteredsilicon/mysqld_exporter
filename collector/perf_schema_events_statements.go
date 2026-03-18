@@ -17,10 +17,12 @@ package collector
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/blang/semver/v4"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -45,7 +47,7 @@ const perfEventsStatementsQuery = `
 	  FROM (
 	    SELECT *
 	    FROM performance_schema.events_statements_summary_by_digest
-	    WHERE SCHEMA_NAME NOT IN ('mysql', 'performance_schema', 'information_schema')
+	    WHERE SCHEMA_NAME NOT IN (%s)
 	      AND LAST_SEEN > DATE_SUB(NOW(), INTERVAL %d SECOND)
 	    ORDER BY LAST_SEEN DESC
 	  )Q
@@ -94,7 +96,7 @@ const perfEventsStatementsQueryMySQL = `
 	  FROM (
 	    SELECT *
 	    FROM performance_schema.events_statements_summary_by_digest
-	    WHERE SCHEMA_NAME NOT IN ('mysql', 'performance_schema', 'information_schema')
+	    WHERE SCHEMA_NAME NOT IN (%s)
 	      AND LAST_SEEN > DATE_SUB(NOW(), INTERVAL %d SECOND)
 	    ORDER BY LAST_SEEN DESC
 	  )Q
@@ -125,19 +127,25 @@ const perfEventsStatementsQueryMySQL = `
 
 // Tunable flags.
 var (
-	perfEventsStatementsLimit = flag.Int(
-		"collect.perf_schema.eventsstatements.limit", 250,
+	perfEventsStatementsLimit = kingpin.Flag(
+		"collect.perf_schema.eventsstatements.limit",
 		"Limit the number of events statements digests by response time",
-	)
-	perfEventsStatementsTimeLimit = flag.Int(
-		"collect.perf_schema.eventsstatements.timelimit", 86400,
+	).Default("250").Int()
+	perfEventsStatementsTimeLimit = kingpin.Flag(
+		"collect.perf_schema.eventsstatements.timelimit",
 		"Limit how old the 'last_seen' events statements can be, in seconds",
-	)
-	perfEventsStatementsDigestTextLimit = flag.Int(
-		"collect.perf_schema.eventsstatements.digest_text_limit", 120,
+	).Default("86400").Int()
+	perfEventsStatementsDigestTextLimit = kingpin.Flag(
+		"collect.perf_schema.eventsstatements.digest_text_limit",
 		"Maximum length of the normalized statement text",
-	)
+	).Default("120").Int()
+	perfEventsStatementsExcludeSchemas = kingpin.Flag(
+		"collect.perf_schema.eventsstatements.exclude_schemas",
+		"Additional schema name to exclude (always excludes mysql, performance_schema, information_schema). Repeatable",
+	).Default("").Strings()
 )
+
+var defaultExcludedSchemas = []string{"'mysql'", "'performance_schema'", "'information_schema'"}
 
 // Metric descriptors.
 var (
@@ -245,9 +253,12 @@ func (ScrapePerfEventsStatements) Scrape(ctx context.Context, instance *instance
 		perfQuery = perfEventsStatementsQueryMySQL
 	}
 
+	excludeSchemasList := buildExcludedSchemasList(*perfEventsStatementsExcludeSchemas)
+
 	perfQuery = fmt.Sprintf(
 		perfQuery,
 		*perfEventsStatementsDigestTextLimit,
+		excludeSchemasList,
 		*perfEventsStatementsTimeLimit,
 		*perfEventsStatementsLimit,
 	)
@@ -347,6 +358,18 @@ func (ScrapePerfEventsStatements) Scrape(ctx context.Context, instance *instance
 		}, schemaName, digest, digestText)
 	}
 	return nil
+}
+
+func buildExcludedSchemasList(extraSchemas []string) string {
+	excludedSchemas := slices.Clone(defaultExcludedSchemas)
+	for _, s := range extraSchemas {
+		escaped := "'" + strings.ReplaceAll(s, "'", "''") + "'"
+		if !slices.Contains(excludedSchemas, escaped) {
+			excludedSchemas = append(excludedSchemas, escaped)
+		}
+	}
+
+	return strings.Join(excludedSchemas, ", ")
 }
 
 // check interface
