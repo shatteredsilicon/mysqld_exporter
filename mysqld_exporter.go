@@ -576,11 +576,11 @@ func main() {
 	if *webAuthFile != "" {
 		authConfigBytes, err := os.ReadFile(*webAuthFile)
 		if err != nil {
-			logger.Error("err", err)
+			logger.Error(err.Error())
 			os.Exit(1)
 		}
 		if err := yaml.Unmarshal(authConfigBytes, &authC); err != nil {
-			logger.Error("err", err)
+			logger.Error(err.Error())
 			os.Exit(1)
 		}
 	}
@@ -589,13 +589,13 @@ func main() {
 	tlsMaxVer := (web.TLSVersion)(tls.VersionTLS13)
 	if tlsMinVersion != nil && *tlsMinVersion != "" {
 		if err := yaml.Unmarshal([]byte(*tlsMinVersion), &tlsMinVer); err != nil {
-			logger.Error("err", fmt.Errorf("Unsupported tls minimum version: %s", *tlsMinVersion))
+			logger.Error(fmt.Sprintf("Unsupported tls minimum version: %s", *tlsMinVersion))
 			os.Exit(1)
 		}
 	}
 	if tlsMaxVersion != nil && *tlsMaxVersion != "" {
 		if err := yaml.Unmarshal([]byte(*tlsMaxVersion), &tlsMaxVer); err != nil {
-			logger.Error("err", fmt.Errorf("Unsupported tls maximum version: %s", *tlsMaxVersion))
+			logger.Error(fmt.Sprintf("Unsupported tls maximum version: %s", *tlsMaxVersion))
 			os.Exit(1)
 		}
 	}
@@ -612,7 +612,7 @@ func main() {
 				}
 			}
 			if cipherSuite == nil {
-				logger.Error("err", fmt.Errorf("Unsupported cipher suite: %s", tlsCipherSuite))
+				logger.Error(fmt.Sprintf("Unsupported cipher suite: %s", tlsCipherSuite))
 				os.Exit(1)
 			}
 			cipherSuites = append(cipherSuites, web.Cipher(cipherSuite.ID))
@@ -629,7 +629,7 @@ func main() {
 	if authC.ServerUser != "" {
 		hashedPsw, err := bcrypt.GenerateFromPassword([]byte(authC.ServerPassword), 0)
 		if err != nil {
-			logger.Error("err", err)
+			logger.Error(err.Error())
 			os.Exit(1)
 		}
 		prometheusWebConfig.Users = map[string]string{
@@ -647,11 +647,11 @@ func main() {
 	}
 	webConfigBytes, err := yaml.Marshal(prometheusWebConfig)
 	if err != nil {
-		logger.Error("err", err)
+		logger.Error(err.Error())
 		os.Exit(1)
 	}
 	if err = os.WriteFile(*webConfigFile, webConfigBytes, 0600); err != nil {
-		logger.Error("err", err)
+		logger.Error(err.Error())
 		os.Exit(1)
 	}
 
