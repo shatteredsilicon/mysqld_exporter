@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/shatteredsilicon/mysqld_exporter/config"
 )
 
 const (
@@ -41,7 +42,7 @@ var (
 )
 
 // ScrapeEngineInnodbStatus scrapes from `SHOW ENGINE INNODB STATUS`.
-type ScrapeEngineInnodbStatus struct{}
+type ScrapeEngineInnodbStatus config.EmptyConfig
 
 // Name of the Scraper. Should be unique.
 func (ScrapeEngineInnodbStatus) Name() string {
