@@ -197,9 +197,7 @@ func (ch *MySqlConfigHandler) ReloadConfigFromDSN(dsn string, logger *slog.Logge
 	mysqlConfig.Port = port
 	mysqlConfig.Socket = socket
 	mysqlConfig.Tls = dsnCfg.TLSConfig
-	if dsnCfg.TLS != nil {
-		mysqlConfig.TlsInsecureSkipVerify = dsnCfg.TLS.InsecureSkipVerify
-	}
+	mysqlConfig.TlsInsecureSkipVerify = dsnCfg.TLSConfig == "skip-verify"
 
 	ch.Lock()
 	ch.Config = &Config{
