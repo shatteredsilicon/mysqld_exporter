@@ -20,7 +20,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/blang/semver/v4"
 	"github.com/go-sql-driver/mysql"
@@ -101,7 +100,6 @@ func newInstance(dsn string) (*instance, error) {
 
 	db.SetMaxOpenConns(2)
 	db.SetMaxIdleConns(1)
-	db.SetConnMaxLifetime(1 * time.Minute)
 	i.db = db
 
 	version, versionString, err := queryVersion(db)
