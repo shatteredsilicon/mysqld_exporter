@@ -18,10 +18,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -472,11 +474,16 @@ func init() {
 }
 
 func main() {
+	// Sort scrapers by name so that flag registration and processing happen
+	// in a deterministic order, as map iteration order is undefined.
+	sortedScrapers := slices.SortedFunc(maps.Keys(scrapers), func(a, b collector.Scraper) int {
+		return strings.Compare(a.Name(), b.Name())
+	})
 	// Generate ON/OFF flags for all scrapers.
 	scraperFlags := map[collector.Scraper]*bool{}
-	for scraper, enabledByDefault := range scrapers {
+	for _, scraper := range sortedScrapers {
 		defaultOn := "false"
-		if enabledByDefault {
+		if scrapers[scraper] {
 			defaultOn = "true"
 		}
 
