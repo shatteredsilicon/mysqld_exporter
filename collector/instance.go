@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
+	"github.com/go-sql-driver/mysql"
 )
 
 const (
@@ -37,10 +38,65 @@ type instance struct {
 
 func newInstance(dsn string) (*instance, error) {
 	i := &instance{}
-	db, err := sql.Open("mysql", dsn)
+
+	connStr := dsn
+	sct := *sqlCheckTimeout
+	if sct == 0 {
+		sct = defaultMaxStatementTime
+	}
+	if *excludeMonitoring {
+		// try max_execution_time first
+		dsnParam := fmt.Sprintf(maxExecutionTime, sct.Milliseconds())
+		if strings.Contains(connStr, "?") {
+			connStr = connStr + "&" + dsnParam
+		} else {
+			connStr = connStr + "?" + dsnParam
+		}
+	}
+
+	db, err := sql.Open("mysql", connStr)
 	if err != nil {
 		return nil, err
 	}
+
+	if err = db.Ping(); err != nil {
+		db.Close()
+
+		if errCode, ok := err.(*mysql.MySQLError); ok && errCode.Number == 1193 && strings.Contains(err.Error(), "max_execution_time") { // Unknown system variable 'max_execution_time', try 'max_statement_time'
+			connStr = dsn
+			dsnParam := fmt.Sprintf(maxStatementTime, sct.Seconds())
+			if strings.Contains(connStr, "?") {
+				connStr = connStr + "&" + dsnParam
+			} else {
+				connStr = connStr + "?" + dsnParam
+			}
+
+			if db, err = sql.Open("mysql", connStr); err != nil {
+				return nil, err
+			} else if err = db.Ping(); err == nil {
+			} else if errCode, ok := err.(*mysql.MySQLError); ok && errCode.Number == 1193 && strings.Contains(err.Error(), "max_statement_time") {
+				// neither max_execution_time nor max_statement_time is supported
+				db.Close()
+			} else {
+				db.Close()
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+
+	if err != nil { // there was an error but the process is not aborted, let's fall back to original DSN
+		if db, err = sql.Open("mysql", dsn); err != nil {
+			return nil, err
+		}
+	} else if *excludeMonitoring {
+		if _, err := db.Exec("SET SESSION long_query_time = ?", sqlCheckTimeout.Seconds()+1); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	i.db = db

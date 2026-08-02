@@ -730,6 +730,10 @@ func overrideFlags(iniFile *ini.File) {
 			return nil
 		}
 
+		if kingpinF.Model().Envar != "" && os.Getenv(kingpinF.Model().Envar) != "" {
+			return nil
+		}
+
 		if value == "" {
 			return nil
 		}

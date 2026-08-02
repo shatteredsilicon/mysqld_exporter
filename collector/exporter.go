@@ -38,6 +38,12 @@ const (
 	// See: https://github.com/go-sql-driver/mysql#system-variables
 	sessionSettingsParam = `log_slow_filter=%27tmp_table_on_disk,filesort_on_disk%27`
 	timeoutParam         = `lock_wait_timeout=%d`
+	maxStatementTime     = `max_statement_time=%f`
+	maxExecutionTime     = `max_execution_time=%d`
+)
+
+var (
+	defaultMaxStatementTime = 5 * time.Second
 )
 
 // Tunable flags.
@@ -62,6 +68,14 @@ var (
 		"exporter.conn-max-lifetime",
 		"Maximum amount of time a connection may be reused. https://golang.org/pkg/database/sql/#DB.SetConnMaxLifetime",
 	).Duration()
+	excludeMonitoring = kingpin.Flag(
+		"exporter.exclude_monitoring_from_slowlog",
+		"Whether to exclude monitoring queries from slow log",
+	).Envar("SSM_EXCLUDE_MONITORING_FROM_SLOWLOG").Bool()
+	sqlCheckTimeout = kingpin.Flag(
+		"exporter.sql_check_timeout",
+		"# maximum time for running the quries, max_statement_time/max_execution_time for MariaDB/MySQL",
+	).Envar("SSM_SQL_CHECK_TIMEOUT").Duration()
 )
 
 // metric definition
