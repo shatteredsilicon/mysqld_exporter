@@ -9,9 +9,13 @@ Changes:
 * [ENHANCEMENT] Raise the default per-scrape connection limit from 1 to 2 and add `--exporter.max_open_connections` to configure it, preventing scrapers from cascade-failing behind a slow query
 * [BUGFIX]
 
-* [FEATURE] Add tls-min-version and tls-max-version config options
-* [FEATURE] Add an optional tls-server-name config option used to verify the server hostname
-* [BUGFIX] Fix a race condition due to which targets could use custom CA from different config sections
+## 0.20.0 / 2026-08-12
+
+Changes:
+
+* [FEATURE] Add tls-min-version and tls-max-version config options #1027
+* [ENHANCEMENT] Add distroless Docker image variant #1030
+* [ENHANCEMENT] Publish images to GHCR #1031
 
 ## 0.19.0 / 2026-03-18
 
