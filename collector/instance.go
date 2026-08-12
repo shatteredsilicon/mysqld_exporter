@@ -37,7 +37,7 @@ type instance struct {
 	versionMajorMinor float64
 }
 
-func newInstance(dsn string) (*instance, error) {
+func newInstance(dsn string, maxOpenConns int) (*instance, error) {
 	i := &instance{}
 
 	connStr := dsn
@@ -98,7 +98,7 @@ func newInstance(dsn string) (*instance, error) {
 		}
 	}
 
-	db.SetMaxOpenConns(2)
+	db.SetMaxOpenConns(maxOpenConns)
 	db.SetMaxIdleConns(1)
 	i.db = db
 
