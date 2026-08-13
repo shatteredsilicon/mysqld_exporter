@@ -258,7 +258,7 @@ func (m MySqlConfig) validateConfig() error {
 	return nil
 }
 
-func (m MySqlConfig) FormDSN(target string) (string, error) {
+func (m MySqlConfig) FormDSN(target string, configSectionName string) (string, error) {
 	config := mysql.NewConfig()
 	config.User = m.User
 	config.Passwd = m.Password
@@ -299,11 +299,11 @@ func (m MySqlConfig) FormDSN(target string) (string, error) {
 			m.TlsServerName != ""
 
 		if hasCustomTLS {
-			if err := m.CustomizeTLS(); err != nil {
+			if err := m.CustomizeTLS(configSectionName); err != nil {
 				err = fmt.Errorf("failed to register a custom TLS configuration for mysql dsn: %w", err)
 				return "", err
 			}
-			config.TLSConfig = "custom"
+			config.TLSConfig = configSectionName
 		}
 	}
 
@@ -314,7 +314,7 @@ func (m MySqlConfig) FormDSN(target string) (string, error) {
 	return config.FormatDSN(), nil
 }
 
-func (m MySqlConfig) CustomizeTLS() error {
+func (m MySqlConfig) CustomizeTLS(configSectionName string) error {
 	var tlsCfg tls.Config
 	if m.SslCa != "" {
 		caBundle := x509.NewCertPool()
@@ -348,6 +348,6 @@ func (m MySqlConfig) CustomizeTLS() error {
 		tlsCfg.ServerName = m.TlsServerName
 	}
 	tlsCfg.InsecureSkipVerify = m.TlsInsecureSkipVerify
-	mysql.RegisterTLSConfig("custom", &tlsCfg)
+	mysql.RegisterTLSConfig(configSectionName, &tlsCfg)
 	return nil
 }
