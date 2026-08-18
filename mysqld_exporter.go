@@ -170,11 +170,13 @@ var scrapers = map[collector.Scraper]bool{
 	collector.ScrapeCustomQuery{}:                         true,
 	collector.ScrapeIndexStat{}:                           false,
 	collector.ScrapeInnoDBTableStats{}:                    true,
+	collector.ScrapeSlaveThreads{}:                        true,
 }
 
 var scrapersHr = map[collector.Scraper]struct{}{
 	collector.ScrapeGlobalStatus{}:  {},
 	collector.ScrapeInnodbMetrics{}: {},
+	collector.ScrapeSlaveThreads{}:  {},
 }
 
 var scrapersMr = map[collector.Scraper]struct{}{
