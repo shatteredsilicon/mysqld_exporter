@@ -46,6 +46,7 @@ import (
 )
 
 const webAuthFileFlagName = "web.auth-file"
+const defaultTimeoutOffsetSeconds = 0.25
 
 var (
 	metricsPath = kingpin.Flag(
@@ -91,7 +92,7 @@ var (
 	timeoutOffset = kingpin.Flag(
 		"timeout-offset",
 		"Offset to subtract from timeout in seconds.",
-	).Default("0.25").Float64()
+	).Default(strconv.FormatFloat(defaultTimeoutOffsetSeconds, 'f', -1, 64)).Float64()
 	configMycnf = kingpin.Flag(
 		"config.my-cnf",
 		"Path to .my.cnf file to read MySQL credentials from.",
@@ -384,7 +385,6 @@ func configFromFlags(collectorFlags map[string]*bool) config.Config {
 	for name, enabled := range collectorFlags {
 		cfg.Collectors[name] = *enabled
 	}
-	cfg.TimeoutOffsetSeconds = *timeoutOffset
 	cfg.EnableExporterLockWaitTimeout = *enableExporterLockTimeout
 	cfg.ExporterLockWaitTimeoutSeconds = *exporterLockTimeout
 	cfg.SlowLogFilter = *slowLogFilter
@@ -426,7 +426,7 @@ func init() {
 	prometheus.MustRegister(versioncollector.NewCollector("mysqld_exporter"))
 }
 
-func newHandler(baseConfig config.Config, logger *slog.Logger) http.HandlerFunc {
+func newHandler(baseConfig config.Config, timeoutOffsetSeconds float64, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const authModule string = "client"
 		var dsn string
@@ -451,7 +451,7 @@ func newHandler(baseConfig config.Config, logger *slog.Logger) http.HandlerFunc 
 		// Use request context for cancellation when connection gets closed.
 		ctx := r.Context()
 		// If a timeout is configured via the Prometheus header, add it to the context.
-		timeoutSeconds, err := getScrapeTimeoutSeconds(r, baseConfig.TimeoutOffsetSeconds)
+		timeoutSeconds, err := getScrapeTimeoutSeconds(r, timeoutOffsetSeconds)
 		if err != nil {
 			logger.Error("Error getting timeout from Prometheus header", "err", err)
 		}
@@ -607,12 +607,15 @@ func init() {
 	kingpin.CommandLine.PreAction(setByUserFlagAction())
 }
 
-func validateExporterFlags(maxOpenConns, queryTimeout int) error {
+func validateExporterFlags(maxOpenConns, queryTimeout int, timeoutOffsetSeconds float64) error {
 	if maxOpenConns < 1 {
 		return fmt.Errorf("invalid value for --exporter.max_open_connections, must be >= 1: %d", maxOpenConns)
 	}
 	if queryTimeout < 0 {
 		return fmt.Errorf("invalid value for --exporter.query_timeout, must be >= 0: %d", queryTimeout)
+	}
+	if timeoutOffsetSeconds < 0 {
+		return fmt.Errorf("invalid value for --timeout-offset, must be >= 0: %f", timeoutOffsetSeconds)
 	}
 	return nil
 }
@@ -677,7 +680,7 @@ func main() {
 	logger.Info("Starting mysqld_exporter", "version", version.Info())
 	logger.Info("Build context", "build_context", version.BuildContext())
 
-	if err := validateExporterFlags(*exporterMaxOpenConns, *exporterQueryTimeout); err != nil {
+	if err := validateExporterFlags(*exporterMaxOpenConns, *exporterQueryTimeout, *timeoutOffset); err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
 	}
@@ -701,7 +704,7 @@ func main() {
 			cfg.Collectors[scraperName] = true
 		}
 	}
-	handlerFunc := newHandler(cfg, logger)
+	handlerFunc := newHandler(cfg, *timeoutOffset, logger)
 	http.Handle(*metricsPath, promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, handlerFunc))
 	var extraPathPrefix string
 	if *metricsPath != "/" && *metricsPath != "" {
@@ -726,14 +729,14 @@ func main() {
 		extraPathPrefix = *metricsPath + "-"
 	}
 
-	hrHandlerFunc := newHandler(configFromFlags(enabledHrScrapers), logger)
+	hrHandlerFunc := newHandler(configFromFlags(enabledHrScrapers), *timeoutOffset, logger)
 	http.Handle(extraPathPrefix+"hr", promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, hrHandlerFunc))
-	mrHandlerFunc := newHandler(configFromFlags(enabledMrScrapers), logger)
+	mrHandlerFunc := newHandler(configFromFlags(enabledMrScrapers), *timeoutOffset, logger)
 	http.Handle(extraPathPrefix+"mr", promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, mrHandlerFunc))
-	lrHandlerFunc := newHandler(configFromFlags(enabledLrScrapers), logger)
+	lrHandlerFunc := newHandler(configFromFlags(enabledLrScrapers), *timeoutOffset, logger)
 	http.Handle(extraPathPrefix+"lr", promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer, lrHandlerFunc))
 
-	http.HandleFunc("/probe", handleProbe(cfg, logger))
+	http.HandleFunc("/probe", handleProbe(cfg, *timeoutOffset, logger))
 	http.HandleFunc("/-/reload", func(w http.ResponseWriter, r *http.Request) {
 		if err = reloadMySqlConfig(iniFile, logger); err != nil {
 			logger.Warn("Error reloading host config", "file", *configMycnf, "error", err)
