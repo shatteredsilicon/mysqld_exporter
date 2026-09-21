@@ -491,14 +491,6 @@ func main() {
 		iniFile.Section("exporter").Key("dsn").SetValue(dsn)
 	}
 
-	if os.Getenv("ON_CONFIGURE") == "1" {
-		err := configure()
-		if err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-
 	// override flag value with config value
 	// if it's not set
 	overrideFlags(iniFile)
@@ -676,46 +668,6 @@ func configVisit(iniFile *ini.File, visitFn func(string, string, string) error) 
 			}
 		}
 	}
-	return nil
-}
-
-func configure() error {
-	iniCfg, err := ini.Load(*configPath)
-	if err != nil {
-		return err
-	}
-
-	if err := configVisit(iniCfg, func(section, key string, value string) error {
-		flagKey := fmt.Sprintf("%s.%s", section, key)
-		if section == "" {
-			flagKey = key
-		}
-
-		setByUser := setByUserMap[flagKey]
-		kingpinF := kingpin.CommandLine.GetFlag(flagKey)
-		if !setByUser || kingpinF == nil {
-			return nil
-		}
-
-		// Don't override web.auth-file config
-		if flagKey == webAuthFileFlagName {
-			return nil
-		}
-
-		iniCfg.Section(section).Key(key).SetValue(kingpinF.Model().Value.String())
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	if dsn := os.Getenv("DATA_SOURCE_NAME"); dsn != "" {
-		iniCfg.Section("exporter").Key("dsn").SetValue(strconv.Quote(dsn))
-	}
-
-	if err = iniCfg.SaveTo(*configPath); err != nil {
-		return err
-	}
-
 	return nil
 }
 
