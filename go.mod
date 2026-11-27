@@ -1,6 +1,6 @@
 module github.com/shatteredsilicon/mysqld_exporter
 
-go 1.26.0
+go 1.27.4
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
@@ -14,8 +14,8 @@ require (
 	github.com/prometheus/common v0.72.1
 	github.com/prometheus/exporter-toolkit v0.20.0
 	github.com/smartystreets/goconvey v1.8.1
-	golang.org/x/crypto v0.58.0
-	golang.org/x/net v0.61.0
+	golang.org/x/crypto v0.58.1-0.20261009181718-2f1f834330b2
+	golang.org/x/net v0.62.0
 	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0
 	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/yaml.v2 v2.4.0

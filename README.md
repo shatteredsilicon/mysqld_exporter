@@ -1,9 +1,7 @@
-# MySQL Server Exporter [![Build Status](https://travis-ci.org/prometheus/mysqld_exporter.svg)][travis]
+# MySQL Server Exporter [![Build Status](https://travis-ci.org/shatteredsilicon/mysqld_exporter.svg)][travis]
 
-[![Build Status](https://github.com/prometheus/mysqld_exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/prometheus/mysqld_exporter/actions/workflows/ci.yml)
-[![Docker Repository on Quay](https://quay.io/repository/prometheus/mysqld-exporter/status)][quay]
-[![Docker Pulls](https://img.shields.io/docker/pulls/prom/mysqld-exporter.svg?maxAge=604800)][hub]
-[![Go Report Card](https://goreportcard.com/badge/github.com/prometheus/mysqld_exporter)](https://goreportcard.com/report/github.com/prometheus/mysqld_exporter)
+[![Build Status](https://github.com/shatteredsilicon/mysqld_exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/shatteredsilicon/mysqld_exporter/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/shatteredsilicon/mysqld_exporter)](https://goreportcard.com/report/github.com/shatteredsilicon/mysqld_exporter)
 
 Prometheus exporter for MySQL server metrics.
 

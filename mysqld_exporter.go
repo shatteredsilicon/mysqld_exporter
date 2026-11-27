@@ -41,8 +41,6 @@ import (
 	"golang.org/x/net/proxy"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v2"
-
-	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 )
 
 const webAuthFileFlagName = "web.auth-file"
@@ -207,92 +205,46 @@ var (
 		"collect.mysql.user.privileges",
 		"Enable collecting user privileges from mysql.user",
 	).Default(strconv.FormatBool(config.DefaultMysqlUserPrivileges)).Bool()
-	toolkitFlags = webflag.AddFlags(kingpin.CommandLine, ":9104")
-	c            *config.AuthConfigHandler
+	c *config.AuthConfigHandler
 )
 
-// scrapers lists all possible collection methods and if they should be enabled by default.
-var scrapers = map[collector.Scraper]bool{
-	collector.ScrapeGlobalStatus{}:                        true,
-	collector.ScrapeGlobalVariables{}:                     true,
-	collector.ScrapeSlaveStatus{}:                         true,
-	collector.ScrapeProcesslist{}:                         false,
-	collector.ScrapeUser{}:                                false,
-	collector.ScrapeTableSchema{}:                         false,
-	collector.ScrapeInfoSchemaInnodbTablespaces{}:         false,
-	collector.ScrapeInnodbMetrics{}:                       false,
-	collector.ScrapeInnodbTrx{}:                           false,
-	collector.ScrapeAutoIncrementColumns{}:                false,
-	collector.ScrapeBinlogSize{}:                          false,
-	collector.ScrapePerfTableIOWaits{}:                    false,
-	collector.ScrapePerfIndexIOWaits{}:                    false,
-	collector.ScrapePerfTableLockWaits{}:                  false,
-	collector.ScrapePerfEventsStatements{}:                false,
-	collector.ScrapePerfEventsStatementsSum{}:             false,
-	collector.ScrapePerfEventsWaits{}:                     false,
-	collector.ScrapePerfFileEvents{}:                      false,
-	collector.ScrapePerfFileInstances{}:                   false,
-	collector.ScrapePerfMemoryEvents{}:                    false,
-	collector.ScrapePerfReplicationGroupMembers{}:         false,
-	collector.ScrapePerfReplicationGroupMemberStats{}:     false,
-	collector.ScrapePerfReplicationApplierStatsByWorker{}: false,
-	collector.ScrapeSysUserSummary{}:                      false,
-	collector.ScrapeUserStat{}:                            false,
-	collector.ScrapeClientStat{}:                          false,
-	collector.ScrapeTableStat{}:                           false,
-	collector.ScrapeSchemaStat{}:                          false,
-	collector.ScrapeInnodbCmp{}:                           true,
-	collector.ScrapeInnodbCmpMem{}:                        true,
-	collector.ScrapeQueryResponseTime{}:                   true,
-	collector.ScrapeEngineTokudbStatus{}:                  false,
-	collector.ScrapeEngineInnodbStatus{}:                  true,
-	collector.ScrapeHeartbeat{}:                           false,
-	collector.ScrapeSlaveHosts{}:                          false,
-	collector.ScrapeReplicaHost{}:                         false,
-	collector.ScrapeRocksDBPerfContext{}:                  false,
-	collector.ScrapeCustomQuery{}:                         true,
-	collector.ScrapeIndexStat{}:                           false,
-	collector.ScrapeInnoDBTableStats{}:                    true,
-	collector.ScrapeSlaveThreads{}:                        true,
+var scrapersHr = map[string]struct{}{
+	collector.ScrapeGlobalStatus{}.Name():  {},
+	collector.ScrapeInnodbMetrics{}.Name(): {},
+	collector.ScrapeSlaveThreads{}.Name():  {},
 }
 
-var scrapersHr = map[collector.Scraper]struct{}{
-	collector.ScrapeGlobalStatus{}:  {},
-	collector.ScrapeInnodbMetrics{}: {},
-	collector.ScrapeSlaveThreads{}:  {},
+var scrapersMr = map[string]struct{}{
+	collector.ScrapeSlaveStatus{}.Name():        {},
+	collector.ScrapeProcesslist{}.Name():        {},
+	collector.ScrapePerfEventsWaits{}.Name():    {},
+	collector.ScrapePerfFileEvents{}.Name():     {},
+	collector.ScrapePerfTableLockWaits{}.Name(): {},
+	collector.ScrapeQueryResponseTime{}.Name():  {},
+	collector.ScrapeEngineInnodbStatus{}.Name(): {},
+	collector.ScrapeInnodbCmp{}.Name():          {},
+	collector.ScrapeInnodbCmpMem{}.Name():       {},
+	collector.ScrapePerfMemoryEvents{}.Name():   {},
 }
 
-var scrapersMr = map[collector.Scraper]struct{}{
-	collector.ScrapeSlaveStatus{}:        {},
-	collector.ScrapeProcesslist{}:        {},
-	collector.ScrapePerfEventsWaits{}:    {},
-	collector.ScrapePerfFileEvents{}:     {},
-	collector.ScrapePerfTableLockWaits{}: {},
-	collector.ScrapeQueryResponseTime{}:  {},
-	collector.ScrapeEngineInnodbStatus{}: {},
-	collector.ScrapeInnodbCmp{}:          {},
-	collector.ScrapeInnodbCmpMem{}:       {},
-	collector.ScrapePerfMemoryEvents{}:   {},
-}
-
-var scrapersLr = map[collector.Scraper]struct{}{
-	collector.ScrapeGlobalVariables{}:             {},
-	collector.ScrapeTableSchema{}:                 {},
-	collector.ScrapeAutoIncrementColumns{}:        {},
-	collector.ScrapeBinlogSize{}:                  {},
-	collector.ScrapePerfTableIOWaits{}:            {},
-	collector.ScrapePerfIndexIOWaits{}:            {},
-	collector.ScrapePerfFileInstances{}:           {},
-	collector.ScrapeUserStat{}:                    {},
-	collector.ScrapeTableStat{}:                   {},
-	collector.ScrapeIndexStat{}:                   {},
-	collector.ScrapePerfEventsStatements{}:        {},
-	collector.ScrapeClientStat{}:                  {},
-	collector.ScrapeInfoSchemaInnodbTablespaces{}: {},
-	collector.ScrapeEngineTokudbStatus{}:          {},
-	collector.ScrapeHeartbeat{}:                   {},
-	collector.ScrapeCustomQuery{}:                 {},
-	collector.ScrapeInnoDBTableStats{}:            {},
+var scrapersLr = map[string]struct{}{
+	collector.ScrapeGlobalVariables{}.Name():             {},
+	collector.ScrapeTableSchema{}.Name():                 {},
+	collector.ScrapeAutoIncrementColumns{}.Name():        {},
+	collector.ScrapeBinlogSize{}.Name():                  {},
+	collector.ScrapePerfTableIOWaits{}.Name():            {},
+	collector.ScrapePerfIndexIOWaits{}.Name():            {},
+	collector.ScrapePerfFileInstances{}.Name():           {},
+	collector.ScrapeUserStat{}.Name():                    {},
+	collector.ScrapeTableStat{}.Name():                   {},
+	collector.ScrapeIndexStat{}.Name():                   {},
+	collector.ScrapePerfEventsStatements{}.Name():        {},
+	collector.ScrapeClientStat{}.Name():                  {},
+	collector.ScrapeInfoSchemaInnodbTablespaces{}.Name(): {},
+	collector.ScrapeEngineTokudbStatus{}.Name():          {},
+	collector.ScrapeHeartbeat{}.Name():                   {},
+	collector.ScrapeCustomQuery{}.Name():                 {},
+	collector.ScrapeInnoDBTableStats{}.Name():            {},
 }
 
 func filterScrapers(scrapers []collector.Scraper, collectParams []string) []collector.Scraper {
@@ -640,13 +592,13 @@ func main() {
 		).Default(defaultOn).Bool()
 
 		scraperFlags[scraper.Name()] = f
-		if _, ok := scrapersHr[scraper]; ok {
+		if _, ok := scrapersHr[scraper.Name()]; ok {
 			enabledHrScrapers[scraper.Name()] = f
 		}
-		if _, ok := scrapersMr[scraper]; ok {
+		if _, ok := scrapersMr[scraper.Name()]; ok {
 			enabledMrScrapers[scraper.Name()] = f
 		}
-		if _, ok := scrapersLr[scraper]; ok {
+		if _, ok := scrapersLr[scraper.Name()]; ok {
 			enabledLrScrapers[scraper.Name()] = f
 		}
 	}
