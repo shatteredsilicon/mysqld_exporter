@@ -19,10 +19,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path"
 	"strconv"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/shatteredsilicon/mysqld_exporter/config"
 )
 
 const (
@@ -53,7 +55,7 @@ var (
 )
 
 // ScrapeBinlogSize collects from `SHOW BINARY LOGS`.
-type ScrapeBinlogSize struct{}
+type ScrapeBinlogSize config.EmptyConfig
 
 // Name of the Scraper. Should be unique.
 func (ScrapeBinlogSize) Name() string {
@@ -116,7 +118,7 @@ func (ScrapeBinlogSize) Scrape(ctx context.Context, instance *instance, ch chan<
 				return nil
 			}
 		default:
-			return fmt.Errorf("invalid number of columns: %q", columnCount)
+			return fmt.Errorf("invalid number of columns: %d", columnCount)
 		}
 
 		size += filesize
@@ -129,8 +131,9 @@ func (ScrapeBinlogSize) Scrape(ctx context.Context, instance *instance, ch chan<
 	ch <- prometheus.MustNewConstMetric(
 		binlogFilesDesc, prometheus.GaugeValue, float64(count),
 	)
-	// The last row contains the last binlog file number.
-	value, _ := strconv.ParseFloat(strings.Split(filename, ".")[1], 64)
+	// The last row contains the last binlog file number, the extension after the
+	// last dot (the base name itself may contain dots).
+	value, _ := strconv.ParseFloat(strings.TrimPrefix(path.Ext(filename), "."), 64)
 	ch <- prometheus.MustNewConstMetric(
 		binlogFileNumberDesc, prometheus.GaugeValue, value,
 	)

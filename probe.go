@@ -23,9 +23,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/shatteredsilicon/mysqld_exporter/collector"
+	"github.com/shatteredsilicon/mysqld_exporter/config"
 )
 
-func handleProbe(scrapers []collector.Scraper, logger *slog.Logger) http.HandlerFunc {
+func handleProbe(baseConfig config.Config, timeoutOffsetSeconds float64, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		params := r.URL.Query()
@@ -48,7 +49,7 @@ func handleProbe(scrapers []collector.Scraper, logger *slog.Logger) http.Handler
 			http.Error(w, fmt.Sprintf("Could not find config section [%s]", authModule), http.StatusBadRequest)
 			return
 		}
-		dsn, err := cfgsection.FormDSN(target)
+		dsn, err := cfgsection.FormDSN(target, authModule)
 		if err != nil {
 			logger.Error(fmt.Sprintf("Failed to form dsn from section [%s]", authModule), "err", err)
 			http.Error(w, fmt.Sprintf("Error forming dsn from config section [%s]", authModule), http.StatusBadRequest)
@@ -56,7 +57,7 @@ func handleProbe(scrapers []collector.Scraper, logger *slog.Logger) http.Handler
 		}
 
 		// If a timeout is configured via the Prometheus header, add it to the context.
-		timeoutSeconds, err := getScrapeTimeoutSeconds(r, *timeoutOffset)
+		timeoutSeconds, err := getScrapeTimeoutSeconds(r, timeoutOffsetSeconds)
 		if err != nil {
 			logger.Error("Error getting timeout from Prometheus header", "err", err)
 		}
@@ -69,10 +70,22 @@ func handleProbe(scrapers []collector.Scraper, logger *slog.Logger) http.Handler
 			r = r.WithContext(ctx)
 		}
 
-		filteredScrapers := filterScrapers(scrapers, collectParams)
+		runtimeConfig := configForCollectParams(baseConfig, collectParams)
+		runtimeConfig.DataSourceName = dsn
 
 		registry := prometheus.NewRegistry()
-		registry.MustRegister(collector.New(ctx, dsn, filteredScrapers, logger))
+		runtime, err := collector.NewRuntimeWithContext(ctx, runtimeConfig, logger.With("target", target))
+		if err != nil {
+			logger.Error("Error creating probe runtime", "err", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer func() {
+			_ = runtime.Shutdown(context.Background())
+		}()
+		for _, c := range runtime.Collectors() {
+			registry.MustRegister(c)
+		}
 
 		h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 		h.ServeHTTP(w, r)

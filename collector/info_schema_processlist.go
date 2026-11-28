@@ -20,12 +20,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"reflect"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
-	"github.com/alecthomas/kingpin/v2"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/shatteredsilicon/mysqld_exporter/config"
 )
 
 const infoSchemaProcesslistQuery = `
@@ -47,22 +47,6 @@ const infoSchemaProcesslistColumnsQuery = `
 	FROM information_schema.columns
 	WHERE table_schema = 'information_schema' AND table_name = 'processlist'
 `
-
-// Tunable flags.
-var (
-	processlistMinTime = kingpin.Flag(
-		"collect.info_schema.processlist.min_time",
-		"Minimum time a thread must be in each state to be counted",
-	).Default("0").Int()
-	processesByUserFlag = kingpin.Flag(
-		"collect.info_schema.processlist.processes_by_user",
-		"Enable collecting the number of processes by user",
-	).Default("true").Bool()
-	processesByHostFlag = kingpin.Flag(
-		"collect.info_schema.processlist.processes_by_host",
-		"Enable collecting the number of processes by host",
-	).Default("true").Bool()
-)
 
 // Metric descriptors.
 var (
@@ -95,7 +79,7 @@ var (
 )
 
 // ScrapeProcesslist collects from `information_schema.processlist`.
-type ScrapeProcesslist struct{}
+type ScrapeProcesslist config.InfoSchemaProcesslistConfig
 
 // Name of the Scraper. Should be unique.
 func (ScrapeProcesslist) Name() string {
@@ -112,14 +96,14 @@ func (ScrapeProcesslist) Version() float64 {
 	return 5.1
 }
 
-func (ScrapeProcesslist) Scrape(ctx context.Context, instance *instance, ch chan<- prometheus.Metric, logger *slog.Logger) error {
+func (s ScrapeProcesslist) Scrape(ctx context.Context, instance *instance, ch chan<- prometheus.Metric, logger *slog.Logger) error {
 	// check if column 'memory_used' exists
 	checkPLMemoryUsedColumn(ctx, instance.db, logger)
 
 	processQuery := fmt.Sprintf(
 		infoSchemaProcesslistQuery,
 		plMemoryUsedSelect,
-		*processlistMinTime,
+		s.MinTime,
 	)
 	db := instance.getDB()
 	processlistRows, err := db.QueryContext(ctx, processQuery)
@@ -181,36 +165,26 @@ func (ScrapeProcesslist) Scrape(ctx context.Context, instance *instance, ch chan
 		stateUserCounts[user] += count
 	}
 
-	for _, command := range sortedMapKeys(stateCounts) {
-		for _, state := range sortedMapKeys(stateCounts[command]) {
+	for _, command := range slices.Sorted(maps.Keys(stateCounts)) {
+		for _, state := range slices.Sorted(maps.Keys(stateCounts[command])) {
 			ch <- prometheus.MustNewConstMetric(processlistCountDesc, prometheus.GaugeValue, float64(stateCounts[command][state]), command, state)
 			ch <- prometheus.MustNewConstMetric(processlistTimeDesc, prometheus.GaugeValue, float64(stateTime[command][state]), command, state)
 		}
 	}
 
-	if *processesByHostFlag {
-		for _, host := range sortedMapKeys(stateHostCounts) {
+	if s.ProcessesByHost {
+		for _, host := range slices.Sorted(maps.Keys(stateHostCounts)) {
 			ch <- prometheus.MustNewConstMetric(processesByHostDesc, prometheus.GaugeValue, float64(stateHostCounts[host]), host)
 		}
 	}
-	if *processesByUserFlag {
-		for _, user := range sortedMapKeys(stateUserCounts) {
+	if s.ProcessesByUser {
+		for _, user := range slices.Sorted(maps.Keys(stateUserCounts)) {
 			ch <- prometheus.MustNewConstMetric(processesByUserDesc, prometheus.GaugeValue, float64(stateUserCounts[user]), user)
 		}
 	}
 	ch <- prometheus.MustNewConstMetric(processlistMemoryUsedDesc, prometheus.GaugeValue, float64(totalMemoryUsed))
 
 	return nil
-}
-
-func sortedMapKeys(m interface{}) []string {
-	v := reflect.ValueOf(m)
-	keys := make([]string, 0, len(v.MapKeys()))
-	for _, key := range v.MapKeys() {
-		keys = append(keys, key.String())
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func sanitizeState(state string) string {
@@ -229,7 +203,7 @@ func sanitizeState(state string) string {
 		"-": "_",
 	}
 	for r := range replacements {
-		state = strings.Replace(state, r, replacements[r], -1)
+		state = strings.ReplaceAll(state, r, replacements[r])
 	}
 	return state
 }

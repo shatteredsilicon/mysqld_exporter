@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/shatteredsilicon/mysqld_exporter/config"
 )
 
 const perfReplicationGroupMembersQuery = `
@@ -27,7 +28,7 @@ const perfReplicationGroupMembersQuery = `
 	`
 
 // ScrapeReplicationGroupMembers collects from `performance_schema.replication_group_members`.
-type ScrapePerfReplicationGroupMembers struct{}
+type ScrapePerfReplicationGroupMembers config.EmptyConfig
 
 // Name of the Scraper. Should be unique.
 func (ScrapePerfReplicationGroupMembers) Name() string {
@@ -58,7 +59,7 @@ func (ScrapePerfReplicationGroupMembers) Scrape(ctx context.Context, instance *i
 		return err
 	}
 
-	var scanArgs = make([]interface{}, len(columnNames))
+	var scanArgs = make([]any, len(columnNames))
 	for i := range scanArgs {
 		scanArgs[i] = &sql.RawBytes{}
 	}
